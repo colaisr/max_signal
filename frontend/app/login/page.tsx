@@ -42,7 +42,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-            Sign in to Max Signal Bot
+            Sign in to <span className="text-gray-900 dark:text-white">Max Sig</span><span className="text-4xl text-blue-600 dark:text-blue-400 font-bold">N</span><span className="text-gray-900 dark:text-white">al bot</span>
           </h2>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>

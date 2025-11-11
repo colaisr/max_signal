@@ -28,7 +28,7 @@ export default function Navigation() {
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
               <Link href="/" className="text-xl font-bold text-gray-900 dark:text-white">
-                Max Signal Bot
+                <span className="text-gray-900 dark:text-white">Max Sig</span><span className="text-2xl text-blue-600 dark:text-blue-400 font-bold">N</span><span className="text-gray-900 dark:text-white">al bot</span>
               </Link>
             </div>
             {isAuthenticated && (

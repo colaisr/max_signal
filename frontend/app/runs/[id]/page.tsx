@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import { useParams, useRouter } from 'next/navigation'
+import { useState } from 'react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
 
@@ -37,6 +38,8 @@ export default function RunDetailPage() {
   const params = useParams()
   const router = useRouter()
   const runId = params.id as string
+  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
+  const [copied, setCopied] = useState(false)
 
   const { data: run, isLoading, error } = useQuery({
     queryKey: ['run', runId],
@@ -61,6 +64,29 @@ export default function RunDetailPage() {
         return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800'
     }
   }
+
+  const toggleStep = (stepName: string) => {
+    const newExpanded = new Set(expandedSteps)
+    if (newExpanded.has(stepName)) {
+      newExpanded.delete(stepName)
+    } else {
+      newExpanded.add(stepName)
+    }
+    setExpandedSteps(newExpanded)
+  }
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const getFinalPost = () => {
+    const mergeStep = run?.steps.find(s => s.step_name === 'merge')
+    return mergeStep?.output_blob || null
+  }
+
+  const finalPost = getFinalPost()
 
   if (isLoading) {
     return (
@@ -127,53 +153,140 @@ export default function RunDetailPage() {
           </div>
         </div>
 
-        {/* Steps */}
+        {/* Final Telegram Post Preview */}
+        {finalPost && run.status === 'succeeded' && (
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg shadow-lg p-6 mb-6 border-2 border-blue-200 dark:border-blue-800">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                📱 Final Telegram Post
+              </h2>
+              <button
+                onClick={() => copyToClipboard(finalPost)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors"
+              >
+                {copied ? '✓ Copied!' : 'Copy to Clipboard'}
+              </button>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono">
+                {finalPost}
+              </pre>
+            </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Ready to publish to Telegram channel
+            </p>
+          </div>
+        )}
+
+        {/* Analysis Steps Timeline */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Analysis Steps
+            Analysis Steps Timeline
           </h2>
 
           {run.steps.length === 0 ? (
             <p className="text-gray-600 dark:text-gray-400">
-              No steps yet. Analysis pipeline will be implemented soon.
+              {run.status === 'running' || run.status === 'queued' 
+                ? 'Pipeline is running... Steps will appear here as they complete.'
+                : 'No steps yet. Analysis pipeline will be implemented soon.'}
             </p>
           ) : (
-            <div className="space-y-4">
-              {run.steps.map((step, index) => (
-                <div
-                  key={index}
-                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {step.step_name}
-                    </h3>
-                    {step.llm_model && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {step.llm_model}
-                      </span>
+            <div className="space-y-3">
+              {run.steps.map((step, index) => {
+                const isExpanded = expandedSteps.has(step.step_name)
+                const stepNames: Record<string, string> = {
+                  wyckoff: '1️⃣ Wyckoff Analysis',
+                  smc: '2️⃣ Smart Money Concepts (SMC)',
+                  vsa: '3️⃣ Volume Spread Analysis (VSA)',
+                  delta: '4️⃣ Delta Analysis',
+                  ict: '5️⃣ ICT Analysis',
+                  merge: '6️⃣ Merge & Telegram Post',
+                }
+                const stepLabel = stepNames[step.step_name] || step.step_name
+
+                return (
+                  <div
+                    key={index}
+                    className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+                  >
+                    {/* Step Header */}
+                    <button
+                      onClick={() => toggleStep(step.step_name)}
+                      className="w-full px-4 py-3 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {stepLabel}
+                        </span>
+                        {step.llm_model && (
+                          <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
+                            {step.llm_model}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4">
+                        {step.tokens_used > 0 && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {step.tokens_used.toLocaleString()} tokens
+                          </span>
+                        )}
+                        {step.cost_est > 0 && (
+                          <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                            ${step.cost_est.toFixed(4)}
+                          </span>
+                        )}
+                        <span className="text-gray-400 dark:text-gray-500">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Step Content (Expandable) */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                        {step.input_blob && (
+                          <div className="mt-3">
+                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">
+                              Input Prompt
+                            </p>
+                            <div className="bg-white dark:bg-gray-800 rounded p-3 text-xs text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                              <p className="font-semibold mb-1">System:</p>
+                              <p className="mb-3">{step.input_blob.system_prompt || 'N/A'}</p>
+                              <p className="font-semibold mb-1">User:</p>
+                              <pre className="whitespace-pre-wrap text-xs">{step.input_blob.user_prompt || 'N/A'}</pre>
+                            </div>
+                          </div>
+                        )}
+
+                        {step.output_blob && (
+                          <div className="mt-4">
+                            <div className="flex justify-between items-center mb-2">
+                              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                Output
+                              </p>
+                              <button
+                                onClick={() => copyToClipboard(step.output_blob || '')}
+                                className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                              >
+                                {copied ? 'Copied!' : 'Copy'}
+                              </button>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded p-4 border border-gray-200 dark:border-gray-700">
+                              <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100">
+                                {step.output_blob}
+                              </pre>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                          Completed: {new Date(step.created_at).toLocaleString()}
+                        </div>
+                      </div>
                     )}
                   </div>
-
-                  {step.output_blob && (
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Output:</p>
-                      <pre className="bg-gray-50 dark:bg-gray-900 p-3 rounded text-sm text-gray-900 dark:text-gray-100 overflow-x-auto">
-                        {step.output_blob}
-                      </pre>
-                    </div>
-                  )}
-
-                  <div className="mt-2 flex gap-4 text-xs text-gray-500 dark:text-gray-400">
-                    {step.tokens_used > 0 && (
-                      <span>Tokens: {step.tokens_used.toLocaleString()}</span>
-                    )}
-                    {step.cost_est > 0 && (
-                      <span>Cost: ${step.cost_est.toFixed(4)}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

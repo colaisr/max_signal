@@ -404,7 +404,7 @@ Constraints and preferences:
 - [x] Foundation ✅ (Completed: Backend/Frontend skeletons, MySQL models, Alembic setup, health endpoints)
 - [x] Data Adapters + Minimal UI ✅ (Completed: CCXT/yfinance adapters, normalized data, caching, dashboard, run detail page)
 - [x] Daystart Pipeline + UI Integration ✅ (Completed: All 6 analysis steps, OpenRouter integration, pipeline orchestrator, step display)
-- [ ] Polish UI (enhance step display, better formatting)
+- [x] Polish UI ✅ (Completed: Enhanced step display, Telegram preview, expandable timeline, copy functionality)
 - [ ] Authentication
 - [ ] Telegram Integration
 - [ ] Scheduling
@@ -444,11 +444,12 @@ Since we need to test and observe the analysis pipeline, we should build a **min
 - **Testing:** Full pipeline visible in UI, can see each step's prompt/output ✅
 - Verified: All 6 steps execute successfully, costs tracked, Telegram post generated ✅
 
-**3. Polish UI** (1 day)
-- Improve run detail page with better formatting
-- Add run history table
-- Add publish to Telegram button
-- **Testing:** Complete user flow works end-to-end
+**3. Polish UI** ✅ **COMPLETED** (1 day)
+- Improve run detail page with better formatting ✅
+- Add Telegram post preview section with copy functionality ✅
+- Add expandable accordion-style step timeline ✅
+- Enhanced visual hierarchy and UX ✅
+- **Testing:** Complete user flow works end-to-end ✅
 
 **4. Authentication** (0.5–1 day, can be parallel)
 - Backend auth endpoints

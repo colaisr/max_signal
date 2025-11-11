@@ -3,8 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useParams, useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
-import { useRequireAuth } from '@/hooks/useAuth'
+import { useState } from 'react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
 
@@ -64,11 +63,6 @@ async function fetchEnabledDataSources() {
   return data
 }
 
-async function fetchAnalysisType(id: string) {
-  const { data } = await axios.get<AnalysisType>(`${API_BASE_URL}/api/analyses/${id}`)
-  return data
-}
-
 async function createRun(
   analysisTypeId: number, 
   instrument: string, 
@@ -91,7 +85,6 @@ export default function AnalysisDetailPage() {
   const params = useParams()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { isLoading: authLoading } = useRequireAuth()
   const analysisId = params.id as string
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
   const [selectedInstrument, setSelectedInstrument] = useState<string>('')
@@ -124,23 +117,9 @@ export default function AnalysisDetailPage() {
   })
 
   // Initialize editable config when analysis loads
-  useEffect(() => {
-    if (analysis && !editableConfig) {
-      setEditableConfig(JSON.parse(JSON.stringify(analysis.config))) // Deep copy
-    }
-  }, [analysis, editableConfig])
-
-  // Set defaults on load
-  useEffect(() => {
-    if (analysis) {
-      if (!selectedInstrument && analysis.config.default_instrument) {
-        setSelectedInstrument(analysis.config.default_instrument)
-      }
-      if (!selectedTimeframe && analysis.config.default_timeframe) {
-        setSelectedTimeframe(analysis.config.default_timeframe)
-      }
-    }
-  }, [analysis, selectedInstrument, selectedTimeframe])
+  if (analysis && !editableConfig) {
+    setEditableConfig(JSON.parse(JSON.stringify(analysis.config))) // Deep copy
+  }
 
   const handleRunAnalysis = () => {
     if (!selectedInstrument || !selectedTimeframe) {
@@ -172,32 +151,6 @@ export default function AnalysisDetailPage() {
     merge: '6️⃣ Merge & Telegram Post',
   }
 
-  const updateStepConfig = (stepIndex: number, field: keyof StepConfig, value: any) => {
-    if (!editableConfig) return
-    const newConfig = JSON.parse(JSON.stringify(editableConfig))
-    newConfig.steps[stepIndex] = { ...newConfig.steps[stepIndex], [field]: value }
-    setEditableConfig(newConfig)
-  }
-
-  const resetConfig = () => {
-    if (analysis) {
-      setEditableConfig(JSON.parse(JSON.stringify(analysis.config)))
-      setIsEditing(false)
-    }
-  }
-
-  const configToUse = editableConfig || analysis?.config
-
-  if (authLoading) {
-    return (
-      <div className="p-8">
-        <div className="max-w-7xl mx-auto">
-          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
   if (isLoading) {
     return (
       <div className="p-8">
@@ -221,6 +174,32 @@ export default function AnalysisDetailPage() {
       </div>
     )
   }
+
+  // Set defaults on load
+  if (analysis) {
+    if (!selectedInstrument && analysis.config.default_instrument) {
+      setSelectedInstrument(analysis.config.default_instrument)
+    }
+    if (!selectedTimeframe && analysis.config.default_timeframe) {
+      setSelectedTimeframe(analysis.config.default_timeframe)
+    }
+  }
+
+  const updateStepConfig = (stepIndex: number, field: keyof StepConfig, value: any) => {
+    if (!editableConfig) return
+    const newConfig = JSON.parse(JSON.stringify(editableConfig))
+    newConfig.steps[stepIndex] = { ...newConfig.steps[stepIndex], [field]: value }
+    setEditableConfig(newConfig)
+  }
+
+  const resetConfig = () => {
+    if (analysis) {
+      setEditableConfig(JSON.parse(JSON.stringify(analysis.config)))
+      setIsEditing(false)
+    }
+  }
+
+  const configToUse = editableConfig || analysis?.config
 
   return (
     <div className="p-8">
@@ -313,7 +292,7 @@ export default function AnalysisDetailPage() {
           )}
 
           <div className="space-y-3">
-            {configToUse && configToUse.steps && configToUse.steps.map((step, index) => {
+            {configToUse?.steps.map((step, index) => {
               const isExpanded = expandedSteps.has(step.step_name)
               const stepLabel = stepNames[step.step_name] || step.step_name
 

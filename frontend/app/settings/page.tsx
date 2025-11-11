@@ -123,20 +123,20 @@ export default function SettingsPage() {
   // Initialize form values from API
   useEffect(() => {
     if (telegramSettings) {
-      if (!telegramBotToken && telegramSettings.bot_token) {
+      if (telegramSettings.bot_token && telegramBotToken === '') {
         setTelegramBotToken(telegramSettings.bot_token)
       }
-      if (!telegramChannelId && telegramSettings.channel_id) {
+      if (telegramSettings.channel_id && telegramChannelId === '') {
         setTelegramChannelId(telegramSettings.channel_id)
       }
     }
-  }, [telegramSettings, telegramBotToken, telegramChannelId])
+  }, [telegramSettings]) // Only depend on telegramSettings
 
   useEffect(() => {
-    if (openRouterSettings && !openRouterKey && openRouterSettings.api_key) {
+    if (openRouterSettings?.api_key && openRouterKey === '') {
       setOpenRouterKey(openRouterSettings.api_key)
     }
-  }, [openRouterSettings, openRouterKey])
+  }, [openRouterSettings]) // Only depend on openRouterSettings
 
   const updateModelMutation = useMutation({
     mutationFn: ({ id, is_enabled }: { id: number; is_enabled: boolean }) =>

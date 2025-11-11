@@ -29,8 +29,17 @@ interface Run {
   steps: RunStep[]
 }
 
+async function fetchRun(id: string) {
+  const { data } = await axios.get<Run>(`${API_BASE_URL}/api/runs/${id}`, {
+    withCredentials: true
+  })
+  return data
+}
+
 async function publishRun(id: string) {
-  const { data } = await axios.post(`${API_BASE_URL}/api/runs/${id}/publish`)
+  const { data } = await axios.post(`${API_BASE_URL}/api/runs/${id}/publish`, {}, {
+    withCredentials: true
+  })
   return data
 }
 

@@ -37,6 +37,7 @@ export function useAuth() {
     queryFn: getCurrentUser,
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
   })
 
   const logoutMutation = useMutation({

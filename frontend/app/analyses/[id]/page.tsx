@@ -313,7 +313,7 @@ export default function AnalysisDetailPage() {
           )}
 
           <div className="space-y-3">
-            {configToUse?.steps.map((step, index) => {
+            {configToUse && configToUse.steps && configToUse.steps.map((step, index) => {
               const isExpanded = expandedSteps.has(step.step_name)
               const stepLabel = stepNames[step.step_name] || step.step_name
 

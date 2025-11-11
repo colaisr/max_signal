@@ -7,6 +7,23 @@ import { useState } from 'react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
 
+interface Model {
+  id: number
+  name: string
+  display_name: string
+  provider: string
+  description: string | null
+  is_enabled: boolean
+}
+
+interface DataSource {
+  id: number
+  name: string
+  display_name: string
+  description: string | null
+  is_enabled: boolean
+}
+
 interface StepConfig {
   step_name: string
   step_type: string
@@ -36,8 +53,13 @@ interface AnalysisType {
   updated_at: string
 }
 
-async function fetchAnalysisType(id: string) {
-  const { data } = await axios.get<AnalysisType>(`${API_BASE_URL}/api/analyses/${id}`)
+async function fetchEnabledModels() {
+  const { data } = await axios.get<Model[]>(`${API_BASE_URL}/api/settings/models?enabled_only=true`)
+  return data
+}
+
+async function fetchEnabledDataSources() {
+  const { data } = await axios.get<DataSource[]>(`${API_BASE_URL}/api/settings/data-sources?enabled_only=true`)
   return data
 }
 
@@ -73,6 +95,16 @@ export default function AnalysisDetailPage() {
   const { data: analysis, isLoading, error } = useQuery({
     queryKey: ['analysis-type', analysisId],
     queryFn: () => fetchAnalysisType(analysisId),
+  })
+
+  const { data: enabledModels = [] } = useQuery({
+    queryKey: ['settings', 'models', 'enabled'],
+    queryFn: fetchEnabledModels,
+  })
+
+  const { data: enabledDataSources = [] } = useQuery({
+    queryKey: ['settings', 'data-sources', 'enabled'],
+    queryFn: fetchEnabledDataSources,
   })
 
   const createRunMutation = useMutation({
@@ -304,12 +336,17 @@ export default function AnalysisDetailPage() {
                               <div>
                                 <label className="text-gray-500 dark:text-gray-400">Model:</label>
                                 {isEditing ? (
-                                  <input
-                                    type="text"
+                                  <select
                                     value={step.model}
                                     onChange={(e) => updateStepConfig(index, 'model', e.target.value)}
                                     className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                                  />
+                                  >
+                                    {enabledModels.map((model) => (
+                                      <option key={model.id} value={model.name}>
+                                        {model.display_name} ({model.provider})
+                                      </option>
+                                    ))}
+                                  </select>
                                 ) : (
                                   <span className="ml-2 text-gray-900 dark:text-white font-medium">
                                     {step.model}
@@ -352,13 +389,22 @@ export default function AnalysisDetailPage() {
                               <div>
                                 <label className="text-gray-500 dark:text-gray-400">Data Sources:</label>
                                 {isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={step.data_sources.join(', ')}
-                                    onChange={(e) => updateStepConfig(index, 'data_sources', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                                    placeholder="ccxt, yfinance"
+                                  <select
+                                    multiple
+                                    value={step.data_sources}
+                                    onChange={(e) => {
+                                      const selected = Array.from(e.target.selectedOptions, option => option.value)
+                                      updateStepConfig(index, 'data_sources', selected)
+                                    }}
                                     className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                                  />
+                                    size={3}
+                                  >
+                                    {enabledDataSources.map((source) => (
+                                      <option key={source.id} value={source.name}>
+                                        {source.display_name}
+                                      </option>
+                                    ))}
+                                  </select>
                                 ) : (
                                   <span className="ml-2 text-gray-900 dark:text-white font-medium">
                                     {step.data_sources.join(', ')}

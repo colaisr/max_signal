@@ -8,6 +8,7 @@ from app.models.analysis_run import AnalysisRun
 from app.models.analysis_step import AnalysisStep
 from app.models.telegram_post import TelegramPost
 from app.models.data_cache import DataCache
+from app.models.settings import AvailableModel, AvailableDataSource, AppSettings
 
 __all__ = [
     "User",
@@ -17,5 +18,8 @@ __all__ = [
     "AnalysisStep",
     "TelegramPost",
     "DataCache",
+    "AvailableModel",
+    "AvailableDataSource",
+    "AppSettings",
 ]
 

@@ -1,10 +1,11 @@
 """
 Authentication endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 from typing import Optional
+from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
 import bcrypt
 from app.core.database import get_db

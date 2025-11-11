@@ -63,6 +63,11 @@ async function fetchEnabledDataSources() {
   return data
 }
 
+async function fetchAnalysisType(id: string) {
+  const { data } = await axios.get<AnalysisType>(`${API_BASE_URL}/api/analyses/${id}`)
+  return data
+}
+
 async function createRun(
   analysisTypeId: number, 
   instrument: string, 

@@ -396,25 +396,27 @@ export default function AnalysisDetailPage() {
                               <div>
                                 <label className="text-gray-500 dark:text-gray-400">Data Sources:</label>
                                 {isEditing ? (
-                                  <select
-                                    multiple
-                                    value={step.data_sources}
-                                    onChange={(e) => {
-                                      const selected = Array.from(e.target.selectedOptions, option => option.value)
-                                      updateStepConfig(index, 'data_sources', selected)
-                                    }}
-                                    className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                                    size={Math.min(enabledDataSources.length, 4)}
-                                  >
-                                    {enabledDataSources.map((source) => (
-                                      <option key={source.id} value={source.name}>
-                                        {source.display_name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                    Hold Ctrl/Cmd to select multiple
-                                  </p>
+                                  <>
+                                    <select
+                                      multiple
+                                      value={step.data_sources}
+                                      onChange={(e) => {
+                                        const selected = Array.from(e.target.selectedOptions, option => option.value)
+                                        updateStepConfig(index, 'data_sources', selected)
+                                      }}
+                                      className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                      size={Math.min(enabledDataSources.length, 4)}
+                                    >
+                                      {enabledDataSources.map((source) => (
+                                        <option key={source.id} value={source.name}>
+                                          {source.display_name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                      Hold Ctrl/Cmd to select multiple
+                                    </p>
+                                  </>
                                 ) : (
                                   <span className="ml-2 text-gray-900 dark:text-white font-medium">
                                     {step.data_sources.join(', ')}
@@ -530,7 +532,6 @@ export default function AnalysisDetailPage() {
         </div>
       </div>
     </div>
-    </Fragment>
   )
 }
 

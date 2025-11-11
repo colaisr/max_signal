@@ -104,18 +104,48 @@ async def create_run(
     
     # Start pipeline execution in background
     def run_pipeline():
-        pipeline = AnalysisPipeline()
         # Create new DB session for background task
         from app.core.database import SessionLocal
         bg_db = SessionLocal()
+        bg_run = None
         try:
             bg_run = bg_db.query(AnalysisRun).filter(AnalysisRun.id == run.id).first()
-            if bg_run:
-                # Pass custom_config if provided
-                custom_config = request.custom_config if hasattr(request, 'custom_config') else None
-                pipeline.run(bg_run, bg_db, custom_config=custom_config)
+            if not bg_run:
+                logger.error(f"Run {run.id} not found in database")
+                return
+            
+            # Initialize pipeline (this will read API key from Settings)
+            pipeline = AnalysisPipeline()
+            
+            # Pass custom_config if provided
+            custom_config = request.custom_config if hasattr(request, 'custom_config') else None
+            
+            # Run the pipeline
+            pipeline.run(bg_run, bg_db, custom_config=custom_config)
+            
         except Exception as e:
-            logger.error(f"Pipeline execution failed: {e}")
+            import traceback
+            error_msg = str(e)
+            error_traceback = traceback.format_exc()
+            logger.error(f"Pipeline execution failed for run {run.id}: {error_msg}\n{error_traceback}")
+            
+            # Update run status to FAILED
+            if bg_run:
+                try:
+                    bg_run.status = RunStatus.FAILED
+                    bg_run.finished_at = datetime.now(timezone.utc)
+                    # Save error message in a step
+                    from app.models.analysis_step import AnalysisStep
+                    error_step = AnalysisStep(
+                        run_id=bg_run.id,
+                        step_name="pipeline_error",
+                        input_blob={"error": error_msg, "traceback": error_traceback},
+                        output_blob=f"Pipeline failed: {error_msg}",
+                    )
+                    bg_db.add(error_step)
+                    bg_db.commit()
+                except Exception as db_error:
+                    logger.error(f"Failed to update run status to FAILED: {db_error}")
         finally:
             bg_db.close()
     

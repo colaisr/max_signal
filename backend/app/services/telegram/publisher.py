@@ -203,9 +203,28 @@ async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -
             'chunks_sent': len(chunks)
         }
     except Exception as e:
-        logger.error(f"telegram_publish_failed: {str(e)}", exc_info=True)
-        return {
-            'success': False,
-            'error': str(e)
-        }
+        error_msg = str(e)
+        logger.error(f"telegram_publish_failed: {error_msg}", exc_info=True)
+        
+        # Provide more helpful error messages for common issues
+        if "Unauthorized" in error_msg or "401" in error_msg:
+            return {
+                'success': False,
+                'error': 'Telegram bot token is invalid or expired. Please check Settings → Telegram Configuration'
+            }
+        elif "Chat not found" in error_msg or "chat_id" in error_msg.lower():
+            return {
+                'success': False,
+                'error': f'Telegram channel not found. Please verify the channel ID in Settings → Telegram Configuration. Error: {error_msg}'
+            }
+        elif "Forbidden" in error_msg or "403" in error_msg:
+            return {
+                'success': False,
+                'error': 'Bot does not have permission to send messages to this channel. Make sure the bot is added as an admin to the channel.'
+            }
+        else:
+            return {
+                'success': False,
+                'error': f'Failed to publish to Telegram: {error_msg}'
+            }
 

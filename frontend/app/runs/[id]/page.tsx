@@ -109,9 +109,16 @@ export default function RunDetailPage() {
   const publishMutation = useMutation({
     mutationFn: () => publishRun(runId),
     onSuccess: (data) => {
-      setPublishStatus({ success: data.success, message: data.message })
+      let message = data.message || 'Published successfully'
+      if (data.warning) {
+        message += ` ⚠️ ${data.warning}`
+      }
+      if (data.failed_users && data.failed_users.length > 0) {
+        message += `\n\nFailed users:\n${data.failed_users.map((u: any) => `- Chat ID ${u.chat_id}: ${u.error}`).join('\n')}`
+      }
+      setPublishStatus({ success: data.success, message })
       queryClient.invalidateQueries({ queryKey: ['run', runId] })
-      setTimeout(() => setPublishStatus(null), 5000)
+      setTimeout(() => setPublishStatus(null), 10000) // Show longer for warnings
     },
     onError: (error: any) => {
       // Extract error message from axios error
@@ -231,13 +238,18 @@ export default function RunDetailPage() {
             {publishStatus && (
               <div className={`mb-4 p-3 rounded ${
                 publishStatus.success 
-                  ? 'bg-green-100 dark:bg-green-900/30 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-400'
-                  : 'bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-400'
+                  ? publishStatus.message?.includes('⚠️') 
+                    ? 'bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-400 dark:border-yellow-700 text-yellow-700 dark:text-yellow-400'
+                    : 'bg-green-100 dark:bg-green-900/30 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-400'
+                  : 'bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-700'
               }`}>
                 {publishStatus.success ? (
-                  <p>✅ {publishStatus.message}</p>
+                  <div className="whitespace-pre-wrap">
+                    {publishStatus.message?.includes('⚠️') ? '⚠️ ' : '✅ '}
+                    {publishStatus.message}
+                  </div>
                 ) : (
-                  <p>❌ Error: {publishStatus.error}</p>
+                  <div className="whitespace-pre-wrap">❌ Error: {publishStatus.error}</div>
                 )}
               </div>
             )}

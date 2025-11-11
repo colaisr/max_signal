@@ -291,17 +291,26 @@ async def publish_run(run_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(telegram_post)
     
+    # Return detailed result including partial failures
     if result['success']:
-        return {
+        response = {
             "success": True,
-            "message": f"Published {result['chunks_sent']} message(s) to Telegram",
-            "message_ids": result['message_ids'],
+            "message": f"Published {result.get('chunks_sent', 0)} message(s) to {result.get('users_notified', 0)} user(s)",
+            "message_ids": result.get('message_ids', []),
+            "users_notified": result.get('users_notified', 0),
+            "users_failed": result.get('users_failed', 0),
+            "failed_users": result.get('failed_users'),
             "telegram_post_id": telegram_post.id
         }
+        # Add warning if some users failed
+        if result.get('users_failed', 0) > 0:
+            response["warning"] = f"Failed to send to {result['users_failed']} user(s). Check failed_users for details."
+        return response
     else:
         return {
             "success": False,
             "error": result.get('error', 'Unknown error'),
+            "failed_users": result.get('failed_users'),
             "telegram_post_id": telegram_post.id
         }
 

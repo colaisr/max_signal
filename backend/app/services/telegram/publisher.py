@@ -177,6 +177,7 @@ async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -
         for user in users:
             try:
                 user_message_ids = []
+                logger.info(f"Attempting to send to user: chat_id={user.chat_id}, username={user.username}")
                 for i, chunk in enumerate(chunks):
                     # Add part indicator if multiple chunks
                     if len(chunks) > 1:
@@ -190,14 +191,16 @@ async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -
                     )
                     user_message_ids.append(message.message_id)
                     all_message_ids.append(message.message_id)
+                    logger.debug(f"Sent chunk {i+1}/{len(chunks)} to user {user.chat_id}, message_id={message.message_id}")
                 
                 successful_users.append(user.chat_id)
-                logger.info(f"telegram_message_sent_to_user: chat_id={user.chat_id}, chunks={len(chunks)}")
+                logger.info(f"Successfully sent message to user: chat_id={user.chat_id}, username={user.username}, chunks={len(chunks)}")
                 
             except Exception as e:
                 error_msg = str(e)
-                logger.error(f"Failed to send to user {user.chat_id}: {error_msg}")
-                failed_users.append({'chat_id': user.chat_id, 'error': error_msg})
+                error_type = type(e).__name__
+                logger.error(f"Failed to send to user {user.chat_id} (username={user.username}): {error_type}: {error_msg}", exc_info=True)
+                failed_users.append({'chat_id': user.chat_id, 'username': user.username, 'error': error_msg, 'error_type': error_type})
                 # Continue with other users even if one fails
         
         if successful_users:

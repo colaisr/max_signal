@@ -23,9 +23,10 @@ apscheduler==3.10.4
 # Logging
 structlog==24.1.0
 
-# Data adapters (will add later)
-# ccxt==4.2.25
-# yfinance==0.2.33
+# Data adapters
+ccxt==4.2.25
+yfinance==0.2.33
+pandas==2.2.0  # Required by yfinance
 
 # Telegram (will add later)
 # aiogram==3.2.0

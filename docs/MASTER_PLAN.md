@@ -346,9 +346,11 @@ Constraints and preferences:
   - [x] Frontend renders and calls backend
 
 - Data adapters
-  - [ ] Crypto OHLCV fetched
-  - [ ] Equity OHLCV fetched
-  - [ ] Normalization verified
+  - [x] Crypto OHLCV fetched ✅
+  - [x] Equity OHLCV fetched ✅
+  - [x] Normalization verified ✅
+  - [x] Caching implemented ✅
+  - [x] Minimal UI working ✅
 
 - Authentication
   - [ ] Login/logout works with session cookie
@@ -398,11 +400,11 @@ Constraints and preferences:
 ### 14) Progress Tracker (MVP)
 
 - [x] Foundation ✅ (Completed: Backend/Frontend skeletons, MySQL models, Alembic setup, health endpoints)
-- [ ] Data adapters
-- [ ] Authentication (2a)
-- [ ] Daystart pipeline
-- [ ] UI for runs
-- [ ] Telegram integration
+- [x] Data Adapters + Minimal UI ✅ (Completed: CCXT/yfinance adapters, normalized data, caching, dashboard, run detail page)
+- [ ] Daystart Pipeline + UI Integration
+- [ ] Polish UI
+- [ ] Authentication
+- [ ] Telegram Integration
 - [ ] Scheduling
 - [ ] Deployment (single VM)
 - [ ] Backtesting (Phase 2)
@@ -425,12 +427,13 @@ Since we need to test and observe the analysis pipeline, we should build a **min
 
 **Revised Milestone Order:**
 
-**1. Data Adapters + Minimal UI Foundation** (1–2 days)
-- Implement CCXT/yfinance adapters
-- Create normalized OHLCV data structure
-- **Build minimal UI:** Basic dashboard with instrument selector and "Run Analysis" button
-- **Build minimal run detail page:** Show run status and basic outputs
-- **Testing:** Can trigger a data fetch and see results in UI
+**1. Data Adapters + Minimal UI Foundation** ✅ **COMPLETED** (1–2 days)
+- Implement CCXT/yfinance adapters ✅
+- Create normalized OHLCV data structure ✅
+- **Build minimal UI:** Basic dashboard with instrument selector and "Run Analysis" button ✅
+- **Build minimal run detail page:** Show run status and basic outputs ✅
+- **Testing:** Can trigger a data fetch and see results in UI ✅
+- Fixed: Database migration for MEDIUMTEXT payload column ✅
 
 **2. Daystart Pipeline + UI Integration** (3–5 days)
 - Implement analysis steps (Wyckoff, SMC, VSA, Delta, ICT, Merge)

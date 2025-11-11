@@ -10,7 +10,7 @@ CREATE DATABASE IF NOT EXISTS `max_signal_dev`
   COLLATE utf8mb4_unicode_ci;
 
 CREATE USER IF NOT EXISTS 'max_signal_user'@'localhost'
-  IDENTIFIED BY 'CHANGE_ME_STRONG_PASSWORD';
+  IDENTIFIED BY 'max_signal_password';
 
 GRANT ALL PRIVILEGES ON `max_signal_dev`.*
   TO 'max_signal_user'@'localhost';

@@ -58,3 +58,7 @@ Thumbs.db
 .env.local
 .env*.local
 
+# Server logs and PID files (created by start_all.sh)
+backend.log
+frontend.log
+.server_pids

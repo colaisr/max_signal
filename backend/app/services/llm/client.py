@@ -11,32 +11,29 @@ logger = logging.getLogger(__name__)
 
 
 def get_openrouter_api_key(db: Optional[Session] = None) -> Optional[str]:
-    """Get OpenRouter API key from Settings or config_local.py.
+    """Get OpenRouter API key from Settings (AppSettings table).
     
-    Priority:
-    1. AppSettings table (if db provided)
-    2. config_local.py (fallback)
+    Args:
+        db: Database session (required)
     
     Returns:
         API key string or None if not found
     """
-    # Try Settings first if DB session provided
-    if db:
-        try:
-            from app.models.settings import AppSettings
-            setting = db.query(AppSettings).filter(
-                AppSettings.key == "openrouter_api_key"
-            ).first()
-            if setting and setting.value:
-                return setting.value
-        except Exception as e:
-            logger.warning(f"Failed to read OpenRouter API key from Settings: {e}")
+    if not db:
+        logger.error("Database session required to read OpenRouter API key from Settings")
+        return None
     
-    # Fallback to config_local.py
-    if OPENROUTER_API_KEY:
-        return OPENROUTER_API_KEY
-    
-    return None
+    try:
+        from app.models.settings import AppSettings
+        setting = db.query(AppSettings).filter(
+            AppSettings.key == "openrouter_api_key"
+        ).first()
+        if setting and setting.value:
+            return setting.value
+        return None
+    except Exception as e:
+        logger.error(f"Failed to read OpenRouter API key from Settings: {e}")
+        return None
 
 
 class LLMClient:
@@ -56,7 +53,7 @@ class LLMClient:
         if not api_key:
             raise ValueError(
                 "OpenRouter API key not configured. "
-                "Please set it in Settings (Settings page) or config_local.py"
+                "Please set it in Settings → OpenRouter Configuration"
             )
         
         self.api_key = api_key

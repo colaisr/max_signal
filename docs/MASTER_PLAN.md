@@ -280,10 +280,14 @@ Constraints and preferences:
    - MySQL wiring (SQLAlchemy models) and Alembic initialized with baseline migration
    - Frontend skeleton (Next.js app + Tailwind + simple page)
    - Local config examples prepared
+   - Local MySQL database created (`max_signal_dev`)
+   - Alembic migrations applied (all tables created)
+   - Start/stop automation scripts (`start_all.sh`, `stop_all.sh`)
    - Acceptance:
      - `GET /health` returns 200. ✅
-     - Alembic baseline applies successfully to local MySQL. ✅ (Ready, pending DB setup)
+     - Alembic baseline applies successfully to local MySQL. ✅
      - Frontend renders and fetches `/health`. ✅
+     - Both servers start/stop via scripts. ✅
 
 2) Data adapters (1–2 days)
    - CCXT and yfinance adapters returning normalized OHLCV for given instrument/timeframe
@@ -406,10 +410,31 @@ Constraints and preferences:
 
 ### 15) Next Actions
 
-1) Confirm initial instruments (e.g., BTC/USDT and AAPL) and timeframes (M15/H1).
-2) Scaffold backend and frontend repos and wire `/health` and a minimal Dashboard.
-3) Implement Daystart intrasteps and Merge, with OpenRouter default model and token/cost logging.
-4) Add Telegram publisher and daily schedule.
+**✅ Completed:**
+- Foundation milestone (skeletons, MySQL setup, migrations, automation scripts)
+
+**🎯 Next Milestones (choose order):**
+
+**Option A: Data Adapters (Recommended first)**
+- Implement CCXT adapter for crypto (BTC/USDT, etc.)
+- Implement yfinance adapter for equities (AAPL, etc.)
+- Create normalized OHLCV data structure
+- Add basic feature extraction (volume stats, structure hints)
+- **Why first:** Needed for the analysis pipeline to work
+
+**Option B: Authentication (Can be done in parallel)**
+- Implement login/register endpoints
+- Add session management
+- Create frontend login page
+- Protect admin routes
+- **Why parallel:** Not blocking for MVP, but good to have early
+
+**After Data Adapters:**
+- Daystart pipeline (Wyckoff, SMC, VSA, Delta, ICT, Merge)
+- OpenRouter integration for LLM calls
+- UI for triggering and viewing runs
+- Telegram integration
+- Scheduling
 
 
 ---

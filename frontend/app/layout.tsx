@@ -1,5 +1,6 @@
 import Providers from './providers'
 import Navigation from '@/components/Navigation'
+import './globals.css'
 
 export default function RootLayout({
   children,

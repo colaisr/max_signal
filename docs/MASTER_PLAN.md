@@ -448,8 +448,9 @@ Constraints and preferences:
 - [x] Data Adapters + Minimal UI ✅ (Completed: CCXT/yfinance adapters, normalized data, caching, dashboard, run detail page)
 - [x] Daystart Pipeline + UI Integration ✅ (Completed: All 6 analysis steps, OpenRouter integration, pipeline orchestrator, step display)
 - [x] Polish UI ✅ (Completed: Enhanced step display, Telegram preview, expandable timeline, copy functionality)
-- [ ] Analyses Page & Pipeline Configuration
-- [ ] Navigation & Layout
+- [x] Navigation & Layout ✅ (Completed: Navigation bar, shared layout, all pages updated)
+- [x] Analyses Page (List) ✅ (Completed: Card grid, analysis types display, API integration)
+- [ ] Analyses Page (Detail) - Pipeline visualization
 - [ ] Authentication (admin-only)
 - [ ] Telegram Integration
 - [ ] Scheduling
@@ -504,18 +505,18 @@ Since we need to test and observe the analysis pipeline, we should build a **min
 - **Testing:** Complete user flow works end-to-end ✅
 
 **5. Analyses Page & Pipeline Configuration** (2-3 days)
-- Create `/analyses` list page (show all analysis types)
-- Create `/analyses/{id}` detail page with pipeline visualization
-- Add `analysis_types` table to store analysis configurations
+- Create `/analyses` list page (show all analysis types) ✅
+- Create `/analyses/{id}` detail page with pipeline visualization ⏳ (In Progress)
+- Add `analysis_types` table to store analysis configurations ✅
 - Refactor pipeline to be configurable per analysis type
 - Show step configuration (models, prompts, data sources) before running
 - **Testing:** Can view pipeline config, change models, run analysis
 
-**6. Navigation & Layout** (1 day)
-- Add top navigation bar (Home, Analyses, Runs, Schedules, Settings)
-- Create layout component with navigation
-- Update all pages to use shared layout
-- **Testing:** Navigation works across all pages
+**6. Navigation & Layout** ✅ **COMPLETED** (1 day)
+- Add top navigation bar (Home, Analyses, Runs, Schedules, Settings) ✅
+- Create layout component with navigation ✅
+- Update all pages to use shared layout ✅
+- **Testing:** Navigation works across all pages ✅
 
 **7. Authentication** (0.5-1 day)
 - Backend auth endpoints (login/logout)

@@ -530,6 +530,7 @@ export default function AnalysisDetailPage() {
         </div>
       </div>
     </div>
+    </Fragment>
   )
 }
 

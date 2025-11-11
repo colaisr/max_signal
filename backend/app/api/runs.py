@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from app.core.database import get_db
 from app.models.analysis_run import AnalysisRun, RunStatus, TriggerType
 from app.models.instrument import Instrument
+from app.models.settings import AppSettings
 from app.services.data.adapters import DataService
 from app.services.analysis.pipeline import AnalysisPipeline
 from app.services.telegram.publisher import publish_to_telegram
@@ -76,6 +77,16 @@ async def create_run(
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to fetch market data: {str(e)}")
+    
+    # Validate OpenRouter API key is configured
+    openrouter_setting = db.query(AppSettings).filter(
+        AppSettings.key == "openrouter_api_key"
+    ).first()
+    if not openrouter_setting or not openrouter_setting.value:
+        raise HTTPException(
+            status_code=400,
+            detail="OpenRouter API key is not configured. Please set it in Settings → OpenRouter Configuration before running analyses."
+        )
     
     # Create or get instrument record
     instrument = db.query(Instrument).filter(Instrument.symbol == request.instrument).first()

@@ -23,7 +23,7 @@ export default function LoginPage() {
       return data
     },
     onSuccess: () => {
-      router.push('/')
+      router.push('/dashboard')
       router.refresh()
     },
     onError: (err: any) => {

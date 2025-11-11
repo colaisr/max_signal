@@ -16,10 +16,18 @@ interface User {
 }
 
 async function getCurrentUser() {
-  const { data } = await axios.get<User>(`${API_BASE_URL}/api/auth/me`, {
-    withCredentials: true
-  })
-  return data
+  try {
+    const { data } = await axios.get<User>(`${API_BASE_URL}/api/auth/me`, {
+      withCredentials: true
+    })
+    return data
+  } catch (error: any) {
+    // If 401, user is not authenticated - this is expected
+    if (error.response?.status === 401) {
+      return null
+    }
+    throw error
+  }
 }
 
 async function logout() {
@@ -38,6 +46,7 @@ export function useAuth() {
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
+    refetchOnMount: true,
   })
 
   const logoutMutation = useMutation({

@@ -3,7 +3,7 @@ Analysis pipeline orchestrator.
 Runs the Daystart analysis through all steps: Wyckoff, SMC, VSA, Delta, ICT, Merge.
 """
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from app.models.analysis_run import AnalysisRun, RunStatus
 from app.models.analysis_step import AnalysisStep
@@ -27,7 +27,7 @@ class AnalysisPipeline:
     
     def __init__(self):
         self.data_service = DataService()
-        self.llm_client = LLMClient()
+        self.llm_client = None  # Will be initialized in run() with db session
         self.steps = [
             ("wyckoff", WyckoffAnalyzer()),
             ("smc", SMCAnalyzer()),
@@ -53,6 +53,10 @@ class AnalysisPipeline:
             Updated AnalysisRun with all steps completed
         """
         try:
+            # Initialize LLM client with db session to read API key from Settings
+            if not self.llm_client:
+                self.llm_client = LLMClient(db=db)
+            
             # Update status to running
             run.status = RunStatus.RUNNING
             db.commit()

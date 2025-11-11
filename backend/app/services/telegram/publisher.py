@@ -180,10 +180,7 @@ async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -
             message_ids.append(message.message_id)
             
             logger.info(
-                "telegram_message_sent",
-                chunk=i + 1,
-                total_chunks=len(chunks),
-                message_id=message.message_id
+                f"telegram_message_sent: chunk={i + 1}/{len(chunks)}, message_id={message.message_id}"
             )
         
         return {
@@ -192,7 +189,7 @@ async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -
             'chunks_sent': len(chunks)
         }
     except Exception as e:
-        logger.error("telegram_publish_failed", error=str(e))
+        logger.error(f"telegram_publish_failed: {str(e)}", exc_info=True)
         return {
             'success': False,
             'error': str(e)

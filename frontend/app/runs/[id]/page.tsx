@@ -114,7 +114,19 @@ export default function RunDetailPage() {
       setTimeout(() => setPublishStatus(null), 5000)
     },
     onError: (error: any) => {
-      setPublishStatus({ success: false, error: error.response?.data?.detail || error.message })
+      // Extract error message from axios error
+      let errorMessage = 'Failed to publish to Telegram'
+      if (error.response) {
+        // Server responded with error
+        errorMessage = error.response.data?.detail || error.response.data?.error || error.response.data?.message || error.message
+      } else if (error.request) {
+        // Request made but no response
+        errorMessage = 'Network error: Could not reach server. Please check if backend is running.'
+      } else {
+        // Something else happened
+        errorMessage = error.message || 'Unknown error occurred'
+      }
+      setPublishStatus({ success: false, error: errorMessage })
       setTimeout(() => setPublishStatus(null), 5000)
     },
   })

@@ -184,8 +184,6 @@ export default function AnalysisDetailPage() {
     }
   }
 
-  const configToUse = editableConfig || analysis?.config
-
   if (isLoading) {
     return (
       <div className="p-8">
@@ -301,7 +299,7 @@ export default function AnalysisDetailPage() {
           )}
 
           <div className="space-y-3">
-            {configToUse?.steps.map((step, index) => {
+            {(editableConfig || analysis.config)?.steps.map((step, index) => {
               const isExpanded = expandedSteps.has(step.step_name)
               const stepLabel = stepNames[step.step_name] || step.step_name
 

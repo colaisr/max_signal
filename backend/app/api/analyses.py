@@ -4,19 +4,6 @@ API endpoints for analysis types.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from pydantic import BaseModel
-from app.core.database import get_db
-from app.models.analysis_type import AnalysisType
-
-router = APIRouter()
-
-
-"""
-API endpoints for analysis types.
-"""
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import List
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from app.core.database import get_db
@@ -62,4 +49,3 @@ async def get_analysis_type_by_name(name: str, db: Session = Depends(get_db)):
     if not analysis_type:
         raise HTTPException(status_code=404, detail="Analysis type not found")
     return analysis_type
-

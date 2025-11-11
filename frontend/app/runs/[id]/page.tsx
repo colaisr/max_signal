@@ -90,17 +90,17 @@ export default function RunDetailPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
+      <div className="p-8">
         <div className="max-w-7xl mx-auto">
           <p className="text-gray-600 dark:text-gray-400">Loading run details...</p>
         </div>
-      </main>
+      </div>
     )
   }
 
   if (error || !run) {
     return (
-      <main className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
+      <div className="p-8">
         <div className="max-w-7xl mx-auto">
           <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 rounded p-4">
             <p className="text-red-700 dark:text-red-400">
@@ -108,12 +108,12 @@ export default function RunDetailPage() {
             </p>
           </div>
         </div>
-      </main>
+      </div>
     )
   }
 
   return (
-    <main className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
+    <div className="p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <button
@@ -291,7 +291,6 @@ export default function RunDetailPage() {
           )}
         </div>
       </div>
-    </main>
+    </div>
   )
 }
-

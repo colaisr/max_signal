@@ -1,14 +1,5 @@
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import './globals.css'
-import { Providers } from './providers'
-
-const inter = Inter({ subsets: ['latin'] })
-
-export const metadata: Metadata = {
-  title: 'Max Signal Bot',
-  description: 'Market analysis and trading signal generation',
-}
+import Providers from './providers'
+import Navigation from '@/components/Navigation'
 
 export default function RootLayout({
   children,
@@ -17,10 +8,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <Providers>{children}</Providers>
+      <body>
+        <Providers>
+          <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+            <Navigation />
+            <main>{children}</main>
+          </div>
+        </Providers>
       </body>
     </html>
   )
 }
-

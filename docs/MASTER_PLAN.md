@@ -81,31 +81,68 @@ Constraints and preferences:
   - Run detail: timeline of steps with prompts/outputs; final post preview; “Publish to Telegram”
   - Settings: model choice, Telegram channel id, schedule time (saved to backend config endpoint or stored locally on server)
 
-### 3a) UX Specification
+### 3a) UX Specification & Product Architecture
 
-**📋 See `PRODUCT_ARCHITECTURE.md` for comprehensive UX/UI specification.**
+**Navigation Structure:**
+- **Home (`/`)**: Landing page with product overview, quick stats, recent activity, quick actions
+- **Analyses (`/analyses`)**: Browse and configure analysis types/pipelines
+  - List view: Cards showing all available analysis types
+  - Detail view: Complete pipeline visualization with step configuration
+- **Runs (`/runs`)**: View all analysis runs (history, status, results)
+- **Schedules (`/schedules`)**: Manage scheduled analysis jobs
+- **Settings (`/settings`)**: Configuration management (models, data sources, Telegram, preferences)
+- **Backtesting (`/backtesting`)**: Phase 2 feature
 
-**Quick Summary:**
-- **Navigation Structure**: Home, Analyses, Runs, Schedules, Settings, Backtesting
-- **Key Pages**:
-  - **Home (`/`)**: Landing page with product overview, quick stats, recent activity
-  - **Analyses (`/analyses`)**: Browse and configure analysis types/pipelines
-    - List view: All available analysis types
-    - Detail view: Pipeline visualization, step configuration (models, prompts, data sources)
-    - Users can see complete pipeline before running, including LLM models and prompts per step
-  - **Runs (`/runs`)**: View all analysis runs (history, status, results)
-  - **Schedules (`/schedules`)**: Manage scheduled analysis jobs
-  - **Settings (`/settings`)**: User preferences, model config, data sources, Telegram
-- **Analysis Type Architecture**: Extensible system supporting multiple analysis types (Daystart, Intraday SMC, Weekly Overview, Custom)
-- **User Roles**: Admin (full access) and Trader (view + run, no config changes)
-- **Pipeline Transparency**: Users can view complete pipeline configuration including:
-  - Step sequence
-  - LLM model per step
-  - System and user prompts
+**Key UX Principles:**
+- **Pipeline Transparency**: Users can see complete pipeline configuration before running:
+  - Step sequence visualization
+  - LLM model per step (with ability to change)
+  - System and user prompts (viewable/editable for admin)
   - Data sources/tools used
   - Estimated cost and duration
+- **Extensibility**: Architecture supports multiple analysis types (Daystart, Intraday SMC, Weekly Overview, Custom)
+- **User Roles**: Currently admin-only; future: Admin (full access) and Trader (view + run, no config changes)
 
-**Full specification**: See `docs/PRODUCT_ARCHITECTURE.md`
+**Analyses Page (`/analyses`):**
+- **List View**: Card grid showing:
+  - Analysis name and description
+  - Number of steps
+  - Estimated cost range
+  - Last run timestamp
+  - Actions: "Configure", "Run", "View History"
+  
+- **Detail View (`/analyses/{id}`)**: 
+  - Analysis overview (name, description, use case, defaults)
+  - **Pipeline Visualization**: Shows all steps with:
+    - Step name and order
+    - LLM model (dropdown to change)
+    - System prompt (view/edit)
+    - User prompt template (with variables: `{instrument}`, `{timeframe}`, `{market_data}`)
+    - Data source/tools used
+    - Temperature, max tokens
+  - Actions: "Run Analysis" (with instrument/timeframe selector), "Save Configuration"
+
+**Runs Page (`/runs`):**
+- Dashboard view with filters (analysis type, status, instrument, date range)
+- Runs table with columns: ID, Analysis Type, Instrument, Timeframe, Status, Steps Completed, Cost, Created/Finished
+- Detail view: Timeline with expandable steps, final Telegram post preview, publish button
+
+**Settings Page (`/settings`):**
+- Tabbed interface:
+  - **LLM Models**: Available models, routing rules, cost per 1K tokens
+  - **Data Sources**: CCXT exchanges, yfinance markets, cache settings
+  - **Telegram**: Bot token, channel ID, publishing settings
+  - **User Preferences**: Profile, theme, timezone, notifications
+  - **System** (admin): Feature flags, cost limits
+
+**Design Patterns:**
+- Left sidebar navigation (or top nav bar for MVP)
+- Dark-first theme
+- Timeline + accordions for steps
+- Status badges with colors (green=succeeded, blue=running, red=failed, yellow=queued)
+- Expandable sections for prompts/outputs
+- Copy-to-clipboard functionality
+- Real-time updates while pipeline runs (polling every 2s)
 
 
 ### 4) Daystart Analysis Pipeline (MVP Feature)
@@ -411,7 +448,9 @@ Constraints and preferences:
 - [x] Data Adapters + Minimal UI ✅ (Completed: CCXT/yfinance adapters, normalized data, caching, dashboard, run detail page)
 - [x] Daystart Pipeline + UI Integration ✅ (Completed: All 6 analysis steps, OpenRouter integration, pipeline orchestrator, step display)
 - [x] Polish UI ✅ (Completed: Enhanced step display, Telegram preview, expandable timeline, copy functionality)
-- [ ] Authentication
+- [ ] Analyses Page & Pipeline Configuration
+- [ ] Navigation & Layout
+- [ ] Authentication (admin-only)
 - [ ] Telegram Integration
 - [ ] Scheduling
 - [ ] Deployment (single VM)
@@ -457,17 +496,46 @@ Since we need to test and observe the analysis pipeline, we should build a **min
 - Enhanced visual hierarchy and UX ✅
 - **Testing:** Complete user flow works end-to-end ✅
 
-**4. Authentication** (0.5–1 day, can be parallel)
-- Backend auth endpoints
-- Frontend login page
-- Protect admin routes
+**4. Polish UI** ✅ **COMPLETED** (1 day)
+- Improve run detail page with better formatting ✅
+- Add Telegram post preview section with copy functionality ✅
+- Add expandable accordion-style step timeline ✅
+- Enhanced visual hierarchy and UX ✅
+- **Testing:** Complete user flow works end-to-end ✅
 
-**5. Telegram Integration** (0.5–1 day)
+**5. Analyses Page & Pipeline Configuration** (2-3 days)
+- Create `/analyses` list page (show all analysis types)
+- Create `/analyses/{id}` detail page with pipeline visualization
+- Add `analysis_types` table to store analysis configurations
+- Refactor pipeline to be configurable per analysis type
+- Show step configuration (models, prompts, data sources) before running
+- **Testing:** Can view pipeline config, change models, run analysis
+
+**6. Navigation & Layout** (1 day)
+- Add top navigation bar (Home, Analyses, Runs, Schedules, Settings)
+- Create layout component with navigation
+- Update all pages to use shared layout
+- **Testing:** Navigation works across all pages
+
+**7. Authentication** (0.5-1 day)
+- Backend auth endpoints (login/logout)
+- Frontend login page
+- Session management
+- **Note:** Admin-only for MVP, no trader role yet
+
+**8. Telegram Integration** (0.5-1 day)
 - Publish endpoint
 - Message splitting
+- Add "Publish to Telegram" button in run detail
 
-**6. Scheduling** (0.5–1 day)
+**9. Scheduling** (0.5-1 day)
 - APScheduler daily job
+- `/schedules` page to manage scheduled jobs
+
+**10. Deployment** (1-2 days)
+- Single VM setup
+- Systemd services
+- Deploy scripts
 
 **Why This Approach:**
 - ✅ Can test visually instead of just API calls

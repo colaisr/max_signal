@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { useRequireAuth } from '@/hooks/useAuth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
 
@@ -90,6 +91,7 @@ export default function AnalysisDetailPage() {
   const params = useParams()
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { isLoading: authLoading } = useRequireAuth()
   const analysisId = params.id as string
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
   const [selectedInstrument, setSelectedInstrument] = useState<string>('')
@@ -185,6 +187,16 @@ export default function AnalysisDetailPage() {
   }
 
   const configToUse = editableConfig || analysis?.config
+
+  if (authLoading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-7xl mx-auto">
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (

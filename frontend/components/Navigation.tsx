@@ -16,8 +16,8 @@ export default function Navigation() {
   const pathname = usePathname()
   const { user, logout, isAuthenticated } = useAuth()
 
-  // Don't show nav on login page
-  if (pathname === '/login') {
+  // Don't show nav on login page or landing page
+  if (pathname === '/login' || pathname === '/') {
     return null
   }
 

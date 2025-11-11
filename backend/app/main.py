@@ -3,7 +3,7 @@ FastAPI application entry point.
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import health, runs, auth, instruments
+from app.api import health, runs, auth, instruments, analyses
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(health.router, tags=["health"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(instruments.router, prefix="/api/instruments", tags=["instruments"])
+app.include_router(analyses.router, prefix="/api/analyses", tags=["analyses"])
 app.include_router(runs.router, prefix="/api/runs", tags=["runs"])
 
 

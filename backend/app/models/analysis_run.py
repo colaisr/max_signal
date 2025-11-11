@@ -26,6 +26,7 @@ class AnalysisRun(Base):
     id = Column(Integer, primary_key=True, index=True)
     trigger_type = Column(SQLEnum(TriggerType), nullable=False)
     instrument_id = Column(Integer, ForeignKey("instruments.id"), nullable=False)
+    analysis_type_id = Column(Integer, ForeignKey("analysis_types.id"), nullable=True)  # NULL for legacy runs
     timeframe = Column(String(10), nullable=False)  # e.g., "M15", "H1", "D1"
     status = Column(SQLEnum(RunStatus), default=RunStatus.QUEUED, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -34,6 +35,7 @@ class AnalysisRun(Base):
 
     # Relationships
     instrument = relationship("Instrument", backref="runs")
+    analysis_type = relationship("AnalysisType", back_populates="runs")
     steps = relationship("AnalysisStep", back_populates="run", cascade="all, delete-orphan")
     telegram_posts = relationship("TelegramPost", back_populates="run", cascade="all, delete-orphan")
 

@@ -166,6 +166,20 @@ async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -
         chunks = split_message(message_text)
         message_ids = []
         
+        # Normalize channel_id: convert numeric string to int if it's a numeric ID
+        # Telegram accepts both int (for numeric IDs) and str (for usernames)
+        chat_id = channel_id
+        if channel_id and channel_id.lstrip('-').isdigit():
+            # It's a numeric ID, convert to int
+            chat_id = int(channel_id)
+        elif channel_id and not channel_id.startswith('@'):
+            # If it's not starting with @, try to convert to int anyway
+            try:
+                chat_id = int(channel_id)
+            except ValueError:
+                # Keep as string (might be a username without @)
+                chat_id = channel_id
+        
         for i, chunk in enumerate(chunks):
             # Add part indicator if multiple chunks
             if len(chunks) > 1:
@@ -173,7 +187,7 @@ async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -
             
             # Send message
             message = await bot.send_message(
-                chat_id=channel_id,
+                chat_id=chat_id,
                 text=chunk,
                 parse_mode=None  # Disable HTML parsing for now (can enable later if needed)
             )

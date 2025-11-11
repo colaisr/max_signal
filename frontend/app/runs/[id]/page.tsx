@@ -44,10 +44,19 @@ export default function RunDetailPage() {
   const { data: run, isLoading, error } = useQuery({
     queryKey: ['run', runId],
     queryFn: () => fetchRun(runId),
-    refetchInterval: (data) => {
-      // Poll every 2 seconds if still running
-      return data?.status === 'running' || data?.status === 'queued' ? 2000 : false
+    refetchInterval: (query) => {
+      const data = query.state.data as Run | undefined
+      // Poll every 2 seconds if still running/queued, otherwise stop polling
+      if (data?.status === 'running' || data?.status === 'queued') {
+        return 2000
+      }
+      return false
     },
+    // Force refetch on mount and window focus
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    // Don't cache stale data when polling - always fetch fresh
+    staleTime: 0,
   })
 
   const getStatusColor = (status: string) => {

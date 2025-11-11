@@ -449,8 +449,8 @@ Constraints and preferences:
 - [x] Daystart Pipeline + UI Integration ✅ (Completed: All 6 analysis steps, OpenRouter integration, pipeline orchestrator, step display)
 - [x] Polish UI ✅ (Completed: Enhanced step display, Telegram preview, expandable timeline, copy functionality)
 - [x] Navigation & Layout ✅ (Completed: Navigation bar, shared layout, all pages updated)
-- [x] Analyses Page (List) ✅ (Completed: Card grid, analysis types display, API integration)
-- [ ] Analyses Page (Detail) - Pipeline visualization
+- [x] Analyses Page & Pipeline Configuration ✅ (Completed: List page, detail page with pipeline visualization, runs filtering, live updates)
+- [ ] Refactor pipeline to use analysis_type configuration (optional optimization)
 - [ ] Authentication (admin-only)
 - [ ] Telegram Integration
 - [ ] Scheduling
@@ -504,13 +504,14 @@ Since we need to test and observe the analysis pipeline, we should build a **min
 - Enhanced visual hierarchy and UX ✅
 - **Testing:** Complete user flow works end-to-end ✅
 
-**5. Analyses Page & Pipeline Configuration** (2-3 days)
+**5. Analyses Page & Pipeline Configuration** ✅ **COMPLETED** (2-3 days)
 - Create `/analyses` list page (show all analysis types) ✅
-- Create `/analyses/{id}` detail page with pipeline visualization ⏳ (In Progress)
+- Create `/analyses/{id}` detail page with pipeline visualization ✅
 - Add `analysis_types` table to store analysis configurations ✅
-- Refactor pipeline to be configurable per analysis type
-- Show step configuration (models, prompts, data sources) before running
-- **Testing:** Can view pipeline config, change models, run analysis
+- Show step configuration (models, prompts, data sources) before running ✅
+- Create `/runs` page with filtering by analysis type ✅
+- Fix live updates for run steps (polling every 2s) ✅
+- **Testing:** Can view pipeline config, run analysis, see live updates ✅
 
 **6. Navigation & Layout** ✅ **COMPLETED** (1 day)
 - Add top navigation bar (Home, Analyses, Runs, Schedules, Settings) ✅

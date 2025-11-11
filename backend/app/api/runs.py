@@ -23,6 +23,7 @@ class CreateRunRequest(BaseModel):
     """Request model for creating a run."""
     instrument: str
     timeframe: str  # M1, M5, M15, H1, D1, etc.
+    analysis_type_id: Optional[int] = None  # Optional for backward compatibility
 
 
 class RunStepResponse(BaseModel):
@@ -92,6 +93,7 @@ async def create_run(
     run = AnalysisRun(
         trigger_type=TriggerType.MANUAL,
         instrument_id=instrument.id,
+        analysis_type_id=request.analysis_type_id,
         timeframe=request.timeframe,
         status=RunStatus.QUEUED
     )
@@ -163,9 +165,18 @@ async def get_run(run_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=List[RunResponse])
-async def list_runs(limit: int = 20, db: Session = Depends(get_db)):
-    """List recent analysis runs."""
-    runs = db.query(AnalysisRun).order_by(AnalysisRun.created_at.desc()).limit(limit).all()
+async def list_runs(
+    analysis_type_id: Optional[int] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """List analysis runs, optionally filtered by analysis type."""
+    query = db.query(AnalysisRun)
+    
+    if analysis_type_id:
+        query = query.filter(AnalysisRun.analysis_type_id == analysis_type_id)
+    
+    runs = query.order_by(AnalysisRun.created_at.desc()).limit(limit).all()
     
     result = []
     for run in runs:

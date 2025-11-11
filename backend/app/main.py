@@ -5,6 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import health, runs, auth, instruments, analyses, settings
 from app.core.config import get_settings
+from app.core.database import SessionLocal
+from app.services.telegram.bot_handler import start_bot_polling, stop_bot_polling
 
 app_settings = get_settings()
 
@@ -35,13 +37,22 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
-    # TODO: Initialize scheduler, database connections, etc.
-    pass
+    # Start Telegram bot polling to handle /start commands
+    # We create a temporary session just to get the bot token
+    db = SessionLocal()
+    try:
+        await start_bot_polling(db)
+    except Exception as e:
+        # Log error but don't fail startup if bot token is not configured
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Could not start Telegram bot polling: {e}")
+    finally:
+        db.close()
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
-    # TODO: Close connections, stop scheduler, etc.
-    pass
+    await stop_bot_polling()
 

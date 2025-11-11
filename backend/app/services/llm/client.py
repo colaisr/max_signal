@@ -43,10 +43,10 @@ class LLMClient:
         """Initialize OpenRouter client.
         
         Args:
-            api_key: Optional API key. If not provided, will try to get from Settings or config_local.py
-            db: Optional database session to read from AppSettings
+            api_key: Optional API key. If not provided, will read from Settings (AppSettings table)
+            db: Database session (required if api_key not provided)
         """
-        # Get API key: use provided, or fetch from Settings/config
+        # Get API key: use provided, or fetch from Settings
         if not api_key:
             api_key = get_openrouter_api_key(db)
         
@@ -125,7 +125,7 @@ class LLMClient:
             if "401" in error_msg or "unauthorized" in error_msg.lower() or "invalid" in error_msg.lower():
                 raise ValueError(
                     f"OpenRouter API key is invalid or expired. "
-                    f"Please update it in Settings (Settings page). Error: {error_msg}"
+                    f"Please update it in Settings → OpenRouter Configuration. Error: {error_msg}"
                 )
             
             raise ValueError(f"LLM call failed: {error_msg}")

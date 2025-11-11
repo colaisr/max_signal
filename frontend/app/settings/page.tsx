@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRequireAuth, useAuth } from '@/hooks/useAuth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
@@ -97,6 +97,8 @@ export default function SettingsPage() {
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [telegramChannelId, setTelegramChannelId] = useState('')
   const [openRouterKey, setOpenRouterKey] = useState('')
+  const telegramInitialized = useRef(false)
+  const openRouterInitialized = useRef(false)
 
   const { data: models = [], isLoading: modelsLoading } = useQuery({
     queryKey: ['settings', 'models'],
@@ -122,21 +124,23 @@ export default function SettingsPage() {
 
   // Initialize form values from API
   useEffect(() => {
-    if (telegramSettings) {
-      if (telegramSettings.bot_token && telegramBotToken === '') {
+    if (telegramSettings && !telegramInitialized.current) {
+      if (telegramSettings.bot_token) {
         setTelegramBotToken(telegramSettings.bot_token)
       }
-      if (telegramSettings.channel_id && telegramChannelId === '') {
+      if (telegramSettings.channel_id) {
         setTelegramChannelId(telegramSettings.channel_id)
       }
+      telegramInitialized.current = true
     }
-  }, [telegramSettings]) // Only depend on telegramSettings
+  }, [telegramSettings])
 
   useEffect(() => {
-    if (openRouterSettings?.api_key && openRouterKey === '') {
+    if (openRouterSettings?.api_key && !openRouterInitialized.current) {
       setOpenRouterKey(openRouterSettings.api_key)
+      openRouterInitialized.current = true
     }
-  }, [openRouterSettings]) // Only depend on openRouterSettings
+  }, [openRouterSettings])
 
   const updateModelMutation = useMutation({
     mutationFn: ({ id, is_enabled }: { id: number; is_enabled: boolean }) =>

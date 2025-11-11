@@ -413,28 +413,56 @@ Constraints and preferences:
 **✅ Completed:**
 - Foundation milestone (skeletons, MySQL setup, migrations, automation scripts)
 
-**🎯 Next Milestones (choose order):**
+**🎯 Recommended Development Strategy:**
 
-**Option A: Data Adapters (Recommended first)**
-- Implement CCXT adapter for crypto (BTC/USDT, etc.)
-- Implement yfinance adapter for equities (AAPL, etc.)
+**Hybrid Approach: Build Minimal UI Early for Testing**
+
+Since we need to test and observe the analysis pipeline, we should build a **minimal UI** early rather than testing only via API endpoints. This gives us:
+- Visual feedback during development
+- Ability to see intrastep outputs in real-time
+- Faster debugging and validation
+- Early UX validation
+
+**Revised Milestone Order:**
+
+**1. Data Adapters + Minimal UI Foundation** (1–2 days)
+- Implement CCXT/yfinance adapters
 - Create normalized OHLCV data structure
-- Add basic feature extraction (volume stats, structure hints)
-- **Why first:** Needed for the analysis pipeline to work
+- **Build minimal UI:** Basic dashboard with instrument selector and "Run Analysis" button
+- **Build minimal run detail page:** Show run status and basic outputs
+- **Testing:** Can trigger a data fetch and see results in UI
 
-**Option B: Authentication (Can be done in parallel)**
-- Implement login/register endpoints
-- Add session management
-- Create frontend login page
-- Protect admin routes
-- **Why parallel:** Not blocking for MVP, but good to have early
-
-**After Data Adapters:**
-- Daystart pipeline (Wyckoff, SMC, VSA, Delta, ICT, Merge)
+**2. Daystart Pipeline + UI Integration** (3–5 days)
+- Implement analysis steps (Wyckoff, SMC, VSA, Delta, ICT, Merge)
 - OpenRouter integration for LLM calls
-- UI for triggering and viewing runs
-- Telegram integration
-- Scheduling
+- **Enhance UI:** Show intrastep timeline with expandable steps
+- **Testing:** Full pipeline visible in UI, can see each step's prompt/output
+
+**3. Polish UI** (1 day)
+- Improve run detail page with better formatting
+- Add run history table
+- Add publish to Telegram button
+- **Testing:** Complete user flow works end-to-end
+
+**4. Authentication** (0.5–1 day, can be parallel)
+- Backend auth endpoints
+- Frontend login page
+- Protect admin routes
+
+**5. Telegram Integration** (0.5–1 day)
+- Publish endpoint
+- Message splitting
+
+**6. Scheduling** (0.5–1 day)
+- APScheduler daily job
+
+**Why This Approach:**
+- ✅ Can test visually instead of just API calls
+- ✅ See intrastep data immediately (critical for prompt tuning)
+- ✅ Faster iteration on analysis logic
+- ✅ Early validation of UX flow
+- ✅ FastAPI `/docs` still available for API testing
+- ✅ Minimal UI can be polished later without blocking backend work
 
 
 ---

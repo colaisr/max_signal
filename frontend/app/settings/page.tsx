@@ -71,10 +71,10 @@ async function updateDataSource(id: number, is_enabled: boolean) {
   return data
 }
 
-async function updateTelegramSettings(bot_token: string | null, channel_id: string | null) {
+async function updateTelegramSettings(bot_token: string | null) {
   const { data } = await axios.put(
     `${API_BASE_URL}/api/settings/telegram`,
-    { bot_token, channel_id },
+    { bot_token },
     { withCredentials: true }
   )
   return data
@@ -95,7 +95,6 @@ export default function SettingsPage() {
   const queryClient = useQueryClient()
   
   const [telegramBotToken, setTelegramBotToken] = useState('')
-  const [telegramChannelId, setTelegramChannelId] = useState('')
   const [openRouterKey, setOpenRouterKey] = useState('')
   const telegramInitialized = useRef(false)
   const openRouterInitialized = useRef(false)
@@ -128,9 +127,6 @@ export default function SettingsPage() {
       if (telegramSettings.bot_token) {
         setTelegramBotToken(telegramSettings.bot_token)
       }
-      if (telegramSettings.channel_id) {
-        setTelegramChannelId(telegramSettings.channel_id)
-      }
       telegramInitialized.current = true
     }
   }, [telegramSettings])
@@ -159,7 +155,7 @@ export default function SettingsPage() {
   })
 
   const updateTelegramMutation = useMutation({
-    mutationFn: () => updateTelegramSettings(telegramBotToken || null, telegramChannelId || null),
+    mutationFn: () => updateTelegramSettings(telegramBotToken || null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings', 'telegram'] })
       alert('Telegram settings saved!')
@@ -343,7 +339,12 @@ export default function SettingsPage() {
             Telegram Configuration
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Configure Telegram bot token and channel ID for publishing analysis results.
+            Configure Telegram bot token. Messages will be sent to all users who started the bot (sent /start command).
+            {telegramSettings?.active_users_count !== undefined && (
+              <span className="ml-2 font-medium text-blue-600 dark:text-blue-400">
+                Active users: {telegramSettings.active_users_count}
+              </span>
+            )}
           </p>
 
           <div className="space-y-4">
@@ -363,19 +364,6 @@ export default function SettingsPage() {
                   Current: {telegramSettings.bot_token_masked}
                 </p>
               )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                Channel ID
-              </label>
-              <input
-                type="text"
-                value={telegramChannelId}
-                onChange={(e) => setTelegramChannelId(e.target.value)}
-                placeholder="@your_channel or -1001234567890"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
             </div>
 
             <button

@@ -13,13 +13,13 @@ _telegram_bot_token = None
 
 
 def get_telegram_credentials(db: Optional[Session] = None) -> tuple[Optional[str], Optional[str]]:
-    """Get Telegram bot token and channel ID from Settings (AppSettings table).
+    """Get Telegram bot token from Settings (AppSettings table).
     
     Args:
         db: Database session (required)
     
     Returns:
-        Tuple of (bot_token, channel_id) or (None, None) if not found
+        Tuple of (bot_token, None) - channel_id removed, kept for backward compatibility
     """
     if not db:
         logger.error("Database session required to read Telegram credentials from Settings")
@@ -30,14 +30,10 @@ def get_telegram_credentials(db: Optional[Session] = None) -> tuple[Optional[str
         bot_token_setting = db.query(AppSettings).filter(
             AppSettings.key == "telegram_bot_token"
         ).first()
-        channel_id_setting = db.query(AppSettings).filter(
-            AppSettings.key == "telegram_channel_id"
-        ).first()
         
         bot_token = bot_token_setting.value if bot_token_setting and bot_token_setting.value else None
-        channel_id = channel_id_setting.value if channel_id_setting and channel_id_setting.value else None
         
-        return bot_token, channel_id
+        return bot_token, None  # channel_id no longer needed
     except Exception as e:
         logger.error(f"Failed to read Telegram credentials from Settings: {e}")
         return None, None
@@ -130,17 +126,17 @@ def split_message(text: str, max_length: int = 4096) -> list[str]:
 
 
 async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -> dict:
-    """Publish message to Telegram channel.
+    """Publish message to all users who started the bot.
     
     Args:
         message_text: Text to publish
-        db: Database session to read credentials from Settings
+        db: Database session to read credentials and users from Settings
     
     Returns:
-        Dict with 'success', 'message_ids', 'error'
+        Dict with 'success', 'message_ids', 'users_notified', 'error'
     """
-    # Get credentials from Settings
-    bot_token, channel_id = get_telegram_credentials(db)
+    # Get bot token from Settings
+    bot_token, _ = get_telegram_credentials(db)
     
     if not bot_token:
         return {
@@ -148,10 +144,20 @@ async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -
             'error': 'Telegram bot token not configured. Please set it in Settings → Telegram Configuration'
         }
     
-    if not channel_id:
+    if not db:
         return {
             'success': False,
-            'error': 'Telegram channel ID not configured. Please set it in Settings → Telegram Configuration'
+            'error': 'Database session required'
+        }
+    
+    # Get all active users who started the bot
+    from app.models.telegram_user import TelegramUser
+    users = db.query(TelegramUser).filter(TelegramUser.is_active == True).all()
+    
+    if not users:
+        return {
+            'success': False,
+            'error': 'No users have started the bot yet. Users need to send /start to the bot first.'
         }
     
     bot = get_telegram_bot(bot_token)
@@ -164,44 +170,52 @@ async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -
     try:
         # Split message if needed
         chunks = split_message(message_text)
-        message_ids = []
+        all_message_ids = []
+        successful_users = []
+        failed_users = []
         
-        # Normalize channel_id: convert numeric string to int if it's a numeric ID
-        # Telegram accepts both int (for numeric IDs) and str (for usernames)
-        chat_id = channel_id
-        if channel_id and channel_id.lstrip('-').isdigit():
-            # It's a numeric ID, convert to int
-            chat_id = int(channel_id)
-        elif channel_id and not channel_id.startswith('@'):
-            # If it's not starting with @, try to convert to int anyway
+        for user in users:
             try:
-                chat_id = int(channel_id)
-            except ValueError:
-                # Keep as string (might be a username without @)
-                chat_id = channel_id
+                user_message_ids = []
+                for i, chunk in enumerate(chunks):
+                    # Add part indicator if multiple chunks
+                    if len(chunks) > 1:
+                        chunk = f"📊 Часть {i + 1}/{len(chunks)}\n\n{chunk}"
+                    
+                    # Send message to user
+                    message = await bot.send_message(
+                        chat_id=int(user.chat_id),  # chat_id is stored as string, convert to int
+                        text=chunk,
+                        parse_mode=None
+                    )
+                    user_message_ids.append(message.message_id)
+                    all_message_ids.append(message.message_id)
+                
+                successful_users.append(user.chat_id)
+                logger.info(f"telegram_message_sent_to_user: chat_id={user.chat_id}, chunks={len(chunks)}")
+                
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"Failed to send to user {user.chat_id}: {error_msg}")
+                failed_users.append({'chat_id': user.chat_id, 'error': error_msg})
+                # Continue with other users even if one fails
         
-        for i, chunk in enumerate(chunks):
-            # Add part indicator if multiple chunks
-            if len(chunks) > 1:
-                chunk = f"📊 Часть {i + 1}/{len(chunks)}\n\n{chunk}"
+        if successful_users:
+            return {
+                'success': True,
+                'message_ids': all_message_ids,
+                'chunks_sent': len(chunks),
+                'users_notified': len(successful_users),
+                'users_failed': len(failed_users),
+                'failed_users': failed_users if failed_users else None
+            }
+        else:
+            return {
+                'success': False,
+                'error': f'Failed to send to all {len(users)} users. Check logs for details.',
+                'failed_users': failed_users
+            }
             
-            # Send message
-            message = await bot.send_message(
-                chat_id=chat_id,
-                text=chunk,
-                parse_mode=None  # Disable HTML parsing for now (can enable later if needed)
-            )
-            message_ids.append(message.message_id)
-            
-            logger.info(
-                f"telegram_message_sent: chunk={i + 1}/{len(chunks)}, message_id={message.message_id}"
-            )
-        
-        return {
-            'success': True,
-            'message_ids': message_ids,
-            'chunks_sent': len(chunks)
-        }
     except Exception as e:
         error_msg = str(e)
         logger.error(f"telegram_publish_failed: {error_msg}", exc_info=True)
@@ -211,16 +225,6 @@ async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -
             return {
                 'success': False,
                 'error': 'Telegram bot token is invalid or expired. Please check Settings → Telegram Configuration'
-            }
-        elif "Chat not found" in error_msg or "chat_id" in error_msg.lower():
-            return {
-                'success': False,
-                'error': f'Telegram channel not found. Please verify the channel ID in Settings → Telegram Configuration. Error: {error_msg}'
-            }
-        elif "Forbidden" in error_msg or "403" in error_msg:
-            return {
-                'success': False,
-                'error': 'Bot does not have permission to send messages to this channel. Make sure the bot is added as an admin to the channel.'
             }
         else:
             return {

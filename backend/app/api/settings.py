@@ -52,7 +52,6 @@ class UpdateDataSourceRequest(BaseModel):
 
 class UpdateTelegramRequest(BaseModel):
     bot_token: Optional[str] = None
-    channel_id: Optional[str] = None
 
 
 class UpdateOpenRouterRequest(BaseModel):
@@ -131,13 +130,15 @@ async def get_telegram_settings(
 ):
     """Get Telegram settings (admin only)."""
     bot_token = db.query(AppSettings).filter(AppSettings.key == "telegram_bot_token").first()
-    channel_id = db.query(AppSettings).filter(AppSettings.key == "telegram_channel_id").first()
+    
+    # Get count of active users
+    from app.models.telegram_user import TelegramUser
+    user_count = db.query(TelegramUser).filter(TelegramUser.is_active == True).count()
     
     return {
         "bot_token": bot_token.value if bot_token else None,
-        "channel_id": channel_id.value if channel_id else None,
         "bot_token_masked": mask_secret(bot_token.value) if bot_token and bot_token.value else None,
-        "channel_id_masked": channel_id.value if channel_id and channel_id.value else None,
+        "active_users_count": user_count,
     }
 
 
@@ -154,14 +155,6 @@ async def update_telegram_settings(
             setting = AppSettings(key="telegram_bot_token", is_secret=True, description="Telegram bot token from @BotFather")
             db.add(setting)
         setting.value = request.bot_token
-        db.commit()
-    
-    if request.channel_id is not None:
-        setting = db.query(AppSettings).filter(AppSettings.key == "telegram_channel_id").first()
-        if not setting:
-            setting = AppSettings(key="telegram_channel_id", is_secret=False, description="Telegram channel ID or username")
-            db.add(setting)
-        setting.value = request.channel_id
         db.commit()
     
     return {"success": True, "message": "Telegram settings updated"}

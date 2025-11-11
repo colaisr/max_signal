@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.models.analysis_run import AnalysisRun, RunStatus, TriggerType
 from app.models.instrument import Instrument
 from app.services.data.adapters import DataService
+from app.services.analysis.pipeline import AnalysisPipeline
 from app.services.telegram.publisher import publish_to_telegram
 from app.models.telegram_post import TelegramPost, PostStatus
 

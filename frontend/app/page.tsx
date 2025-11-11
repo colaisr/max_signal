@@ -26,8 +26,14 @@ interface Run {
 }
 
 async function fetchInstruments() {
-  const { data } = await axios.get<Instrument[]>(`${API_BASE_URL}/api/instruments`)
-  return data
+  try {
+    const { data } = await axios.get<Instrument[]>(`${API_BASE_URL}/api/instruments`)
+    console.log('Instruments loaded:', data.length)
+    return data
+  } catch (error) {
+    console.error('Error fetching instruments:', error)
+    throw error
+  }
 }
 
 async function fetchRuns() {
@@ -49,7 +55,7 @@ export default function Home() {
   const [selectedInstrument, setSelectedInstrument] = useState<string>('')
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('H1')
 
-  const { data: instruments = [], isLoading: instrumentsLoading } = useQuery({
+  const { data: instruments = [], isLoading: instrumentsLoading, error: instrumentsError } = useQuery({
     queryKey: ['instruments'],
     queryFn: fetchInstruments,
   })
@@ -126,12 +132,23 @@ export default function Home() {
                 disabled={instrumentsLoading}
               >
                 <option value="">Select instrument...</option>
-                {instruments.map((inst) => (
-                  <option key={inst.symbol} value={inst.symbol}>
-                    {inst.display_name} ({inst.type})
-                  </option>
-                ))}
+                {instrumentsLoading ? (
+                  <option disabled>Loading instruments...</option>
+                ) : instrumentsError ? (
+                  <option disabled>Error loading instruments</option>
+                ) : (
+                  instruments.map((inst) => (
+                    <option key={inst.symbol} value={inst.symbol}>
+                      {inst.display_name} ({inst.type})
+                    </option>
+                  ))
+                )}
               </select>
+              {instrumentsError && (
+                <p className="text-xs text-red-500 mt-1">
+                  Error: {instrumentsError instanceof Error ? instrumentsError.message : 'Failed to load instruments'}
+                </p>
+              )}
             </div>
 
             <div>

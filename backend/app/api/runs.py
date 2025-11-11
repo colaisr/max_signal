@@ -10,6 +10,11 @@ from app.core.database import get_db
 from app.models.analysis_run import AnalysisRun, RunStatus, TriggerType
 from app.models.instrument import Instrument
 from app.services.data.adapters import DataService
+from app.services.analysis.pipeline import AnalysisPipeline
+from fastapi import BackgroundTasks
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -45,7 +50,11 @@ class RunResponse(BaseModel):
 
 
 @router.post("", response_model=RunResponse)
-async def create_run(request: CreateRunRequest, db: Session = Depends(get_db)):
+async def create_run(
+    request: CreateRunRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     """Create a new analysis run.
     
     For now, this just fetches market data and creates a run record.
@@ -90,11 +99,22 @@ async def create_run(request: CreateRunRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(run)
     
-    # For now, immediately mark as succeeded with basic info
-    # TODO: This will be replaced with actual pipeline execution
-    run.status = RunStatus.SUCCEEDED
-    run.finished_at = datetime.now(timezone.utc)
-    db.commit()
+    # Start pipeline execution in background
+    def run_pipeline():
+        pipeline = AnalysisPipeline()
+        # Create new DB session for background task
+        from app.core.database import SessionLocal
+        bg_db = SessionLocal()
+        try:
+            bg_run = bg_db.query(AnalysisRun).filter(AnalysisRun.id == run.id).first()
+            if bg_run:
+                pipeline.run(bg_run, bg_db)
+        except Exception as e:
+            logger.error(f"Pipeline execution failed: {e}")
+        finally:
+            bg_db.close()
+    
+    background_tasks.add_task(run_pipeline)
     
     return RunResponse(
         id=run.id,

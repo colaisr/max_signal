@@ -1,0 +1,343 @@
+"""
+Base class and individual step analyzers for the Daystart analysis pipeline.
+"""
+from typing import Dict, Any
+from app.services.llm.client import LLMClient
+from app.services.data.normalized import MarketData
+
+
+class BaseAnalyzer:
+    """Base class for analysis steps."""
+    
+    def get_system_prompt(self) -> str:
+        """Get the system prompt for this step."""
+        raise NotImplementedError
+    
+    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+        """Build the user prompt from context."""
+        raise NotImplementedError
+    
+    def analyze(
+        self,
+        context: Dict[str, Any],
+        llm_client: LLMClient,
+    ) -> Dict[str, Any]:
+        """Run the analysis step.
+        
+        Returns:
+            Dict with 'input', 'output', 'model', 'tokens_used', 'cost_est'
+        """
+        system_prompt = self.get_system_prompt()
+        user_prompt = self.build_user_prompt(context)
+        
+        # Make LLM call
+        result = llm_client.call(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+        
+        return {
+            "input": {
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+            },
+            "output": result["content"],
+            "model": result["model"],
+            "tokens_used": result["tokens_used"],
+            "cost_est": result["cost_est"],
+        }
+
+
+class WyckoffAnalyzer(BaseAnalyzer):
+    """Wyckoff analysis step."""
+    
+    def get_system_prompt(self) -> str:
+        return """You are an expert in Wyckoff Method analysis. Analyze market structure 
+        to identify accumulation, distribution, markup, and markdown phases. Provide clear, 
+        actionable insights about market context and likely scenarios."""
+    
+    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+        market_data: MarketData = context["market_data"]
+        instrument = context["instrument"]
+        timeframe = context["timeframe"]
+        
+        # Build prompt with market data summary
+        prompt = f"""Analyze {instrument} on {timeframe} timeframe using Wyckoff Method.
+
+Recent price action (last 20 candles):
+"""
+        for candle in market_data.candles[-20:]:
+            prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: O={candle.open:.2f} H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f} V={candle.volume:.2f}\n"
+        
+        prompt += """
+Determine:
+1. Current Wyckoff phase (Accumulation/Distribution/Markup/Markdown)
+2. Market context and cycle position
+3. Likely scenario (continuation or reversal)
+4. Key levels to watch
+
+Provide analysis in structured format suitable for trading decisions."""
+        
+        return prompt
+
+
+class SMCAnalyzer(BaseAnalyzer):
+    """Smart Money Concepts analysis step."""
+    
+    def get_system_prompt(self) -> str:
+        return """You are an expert in Smart Money Concepts (SMC). Analyze market structure 
+        to identify BOS (Break of Structure), CHoCH (Change of Character), Order Blocks, 
+        Fair Value Gaps (FVG), and Liquidity Pools. Identify key levels and liquidity events."""
+    
+    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+        market_data: MarketData = context["market_data"]
+        instrument = context["instrument"]
+        timeframe = context["timeframe"]
+        
+        prompt = f"""Analyze {instrument} on {timeframe} using Smart Money Concepts.
+
+Price structure (last 50 candles):
+"""
+        for candle in market_data.candles[-50:]:
+            prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: O={candle.open:.2f} H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f}\n"
+        
+        prompt += """
+Identify:
+1. BOS (Break of Structure) and CHoCH points
+2. Order Blocks (OB) - supply/demand zones
+3. Fair Value Gaps (FVG) - imbalance zones
+4. Liquidity Pools - areas where stops are likely
+5. Key levels for potential price returns
+
+Provide structured analysis with specific price levels."""
+        
+        return prompt
+
+
+class VSAAnalyzer(BaseAnalyzer):
+    """Volume Spread Analysis step."""
+    
+    def get_system_prompt(self) -> str:
+        return """You are an expert in Volume Spread Analysis (VSA). Analyze volume, spread, 
+        and price action to identify large participant activity. Look for signals like no demand, 
+        no supply, stopping volume, climactic action, and effort vs result."""
+    
+    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+        market_data: MarketData = context["market_data"]
+        instrument = context["instrument"]
+        timeframe = context["timeframe"]
+        
+        prompt = f"""Analyze {instrument} on {timeframe} using Volume Spread Analysis.
+
+OHLCV data (last 30 candles):
+"""
+        for candle in market_data.candles[-30:]:
+            spread = candle.high - candle.low
+            prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: Spread={spread:.2f} Volume={candle.volume:.2f} Close={candle.close:.2f}\n"
+        
+        prompt += """
+Identify:
+1. Large participant activity (volume analysis)
+2. No demand / no supply signals
+3. Stopping volume (absorption)
+4. Climactic action (exhaustion)
+5. Effort vs result (volume vs price movement)
+6. Areas where effort without result suggests reversal
+
+Provide VSA signals and their implications."""
+        
+        return prompt
+
+
+class DeltaAnalyzer(BaseAnalyzer):
+    """Delta analysis step."""
+    
+    def get_system_prompt(self) -> str:
+        return """You are an expert in Delta analysis. Analyze buying vs selling pressure 
+        to identify dominance, anomalous delta, absorption, divergence, and where large 
+        players are holding positions or absorbing aggression."""
+    
+    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+        market_data: MarketData = context["market_data"]
+        instrument = context["instrument"]
+        timeframe = context["timeframe"]
+        
+        # Note: Real delta requires order flow data, but we'll analyze what we can from volume/price
+        prompt = f"""Analyze {instrument} on {timeframe} using Delta analysis principles.
+
+Note: Full delta requires order flow data. Analyze buying/selling pressure from volume and price action.
+
+Price and volume data (last 30 candles):
+"""
+        for candle in market_data.candles[-30:]:
+            body = abs(candle.close - candle.open)
+            is_bullish = candle.close > candle.open
+            prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: {'Bullish' if is_bullish else 'Bearish'} Body={body:.2f} Volume={candle.volume:.2f}\n"
+        
+        prompt += """
+Identify:
+1. Buying vs selling dominance
+2. Anomalous delta patterns
+3. Absorption zones (volume without price movement)
+4. Divergences (price vs volume/strength)
+5. Where large players are holding or absorbing
+
+Provide delta-based insights."""
+        
+        return prompt
+
+
+class ICTAnalyzer(BaseAnalyzer):
+    """ICT (Inner Circle Trader) analysis step."""
+    
+    def get_system_prompt(self) -> str:
+        return """You are an expert in ICT (Inner Circle Trader) methodology. Analyze 
+        liquidity manipulation, PD Arrays (Premium/Discount), Fair Value Gaps, and optimal 
+        entry points after liquidity sweeps."""
+    
+    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+        market_data: MarketData = context["market_data"]
+        instrument = context["instrument"]
+        timeframe = context["timeframe"]
+        wyckoff_result = context["previous_steps"].get("wyckoff", {})
+        smc_result = context["previous_steps"].get("smc", {})
+        
+        prompt = f"""Analyze {instrument} on {timeframe} using ICT methodology.
+
+Price action (last 50 candles):
+"""
+        for candle in market_data.candles[-50:]:
+            prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f}\n"
+        
+        prompt += f"""
+Previous analysis context:
+- Wyckoff phase: {wyckoff_result.get('output', 'N/A')[:100]}...
+- SMC structure: {smc_result.get('output', 'N/A')[:100]}...
+
+Identify:
+1. Liquidity manipulation (sweeps above highs/below lows)
+2. PD Arrays (Premium/Discount zones)
+3. Fair Value Gaps (FVG) for return zones
+4. Optimal entry points after liquidity collection
+5. False breakouts and return scenarios
+
+Provide ICT-based entry strategy."""
+        
+        return prompt
+
+
+class MergeAnalyzer(BaseAnalyzer):
+    """Merge step - combines all analyses into final Telegram post."""
+    
+    def get_system_prompt(self) -> str:
+        return """You are a professional trading analyst. Combine multiple analysis methods 
+        into a cohesive, actionable Telegram post. Follow the exact format and style specified 
+        in the user prompt. Write in Russian as specified."""
+    
+    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+        instrument = context["instrument"]
+        timeframe = context["timeframe"]
+        previous_steps = context["previous_steps"]
+        
+        # Build prompt with all previous step outputs
+        prompt = f"""Объедини результаты анализа {instrument} на таймфрейме {timeframe} в единый пост для Telegram.
+
+Результаты анализа по методам:
+
+1️⃣ WYCKOFF:
+{previous_steps.get('wyckoff', {}).get('output', 'Не доступно')}
+
+2️⃣ SMC (Smart Money Concepts):
+{previous_steps.get('smc', {}).get('output', 'Не доступно')}
+
+3️⃣ VSA (Volume Spread Analysis):
+{previous_steps.get('vsa', {}).get('output', 'Не доступно')}
+
+4️⃣ DELTA:
+{previous_steps.get('delta', {}).get('output', 'Не доступно')}
+
+5️⃣ ICT:
+{previous_steps.get('ict', {}).get('output', 'Не доступно')}
+
+---
+
+Теперь создай финальный пост в формате Telegram, следуя ТОЧНО этому шаблону:
+
+💬 ПРОМТ ДЛЯ АНАЛИЗА РЫНКА (в формате поста для TELEGRAM)
+
+Сделай анализ рынка в форме готового сообщения для Телеграм-канала —
+структурно, списками, без таблиц и без воды.
+Текст должен быть как полноценный пост с логикой профессионального разбора и планом действий.
+
+⸻
+
+🔹 Требования к оформлению:
+ • Обязательно должен быть заголовок, отражающий суть анализа.
+ • Далее — блоки с анализом по каждому методу.
+ • Всё в едином стиле телеграм-поста: коротко, точно, информативно.
+ • В конце — внутридневной торговый план и таймфрейм для закрепления входа.
+
+⸻
+
+🔹 Проанализируй рынок по 5 подходам:
+ • Wyckoff
+ • Smart Money Concepts (SMC)
+ • ICT
+ • VSA
+ • Delta-анализ
+
+⸻
+
+🔹 Пошагово:
+1️⃣ Wyckoff — фаза рынка, контекст, вероятный сценарий.
+2️⃣ SMC — BOS, CHoCH, OB, FVG, Liquidity Pools, ключевые уровни/возвраты.
+3️⃣ VSA — активность крупных участников; no demand/supply; stopping volume; climactic action; effort vs result.
+4️⃣ Delta — доминация, аномалии, абсорбция, дивергенции, удержание.
+5️⃣ ICT — манипуляции ликвидностью, зоны возврата (FVG, PD Arrays), точки входа.
+
+⸻
+
+🔹 Объединение:
+ • Wyckoff — контекст цикла.
+ • SMC — структура и зоны ликвидности.
+ • VSA+Delta — подтверждение силы/слабости.
+ • ICT — точка входа после манипуляции и возврата в дисбаланс.
+
+Логика: Контекст → Структура → Подтверждение силы → Манипуляция → Вход → Удержание.
+
+⸻
+
+🔹 Манипуляционный план (Smart Money / ICT):
+ • Где вероятен сбор ликвидности (над хаями/под лоями).
+ • Где ложный пробой и возврат в диапазон.
+ • Какая зона возврата (FVG/OB) — ключ для входа.
+ • Где цели и стопы маркетмейкера.
+ • Что подтвердит сценарий (BOS или реакция по дельте).
+
+⸻
+
+🔹 Внутридневной торговый план («если-то»):
+ • Если закрепление выше ключевой зоны → приоритет лонг; вход после теста + подтверждения по дельте.
+ • Если ниже зоны ликвидности → приоритет шорт; вход после возврата в дисбаланс.
+ • Если консолидация без силы → ожидание; работа от границ диапазона.
+
+📍 Укажи: приоритет направления, зону входа, зону стопа, ближайшие цели, таймфрейм закрепления (M15/H1).
+
+⸻
+
+🔹 Итог: три сценария
+ • 🟢 Бычий — при закреплении выше ключевой зоны.
+ • 🔴 Медвежий — при закреплении ниже.
+ • ⚪ Нейтральный — при консолидации.
+
+⸻
+
+📌 Формат вывода:
+ • Всё в виде готового поста для Telegram.
+ • Есть заголовок.
+ • Всё списками, без таблиц, без воды.
+
+Создай финальный пост сейчас, используя результаты анализа выше."""
+        
+        return prompt
+

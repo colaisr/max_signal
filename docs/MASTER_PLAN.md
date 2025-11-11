@@ -357,9 +357,11 @@ Constraints and preferences:
   - [ ] Admin-only pages and actions enforced
 
 - Daystart pipeline
-  - [ ] All 5 method steps produce outputs
-  - [ ] Merge step produces Telegram-ready post
-  - [ ] Costs/tokens recorded
+  - [x] All 6 method steps produce outputs ✅
+  - [x] Merge step produces Telegram-ready post ✅
+  - [x] Costs/tokens recorded ✅
+  - [x] Pipeline orchestrator working ✅
+  - [x] Steps visible in UI ✅
 
 - UI for runs
   - [ ] Manual trigger from UI works
@@ -401,8 +403,8 @@ Constraints and preferences:
 
 - [x] Foundation ✅ (Completed: Backend/Frontend skeletons, MySQL models, Alembic setup, health endpoints)
 - [x] Data Adapters + Minimal UI ✅ (Completed: CCXT/yfinance adapters, normalized data, caching, dashboard, run detail page)
-- [ ] Daystart Pipeline + UI Integration
-- [ ] Polish UI
+- [x] Daystart Pipeline + UI Integration ✅ (Completed: All 6 analysis steps, OpenRouter integration, pipeline orchestrator, step display)
+- [ ] Polish UI (enhance step display, better formatting)
 - [ ] Authentication
 - [ ] Telegram Integration
 - [ ] Scheduling
@@ -435,11 +437,12 @@ Since we need to test and observe the analysis pipeline, we should build a **min
 - **Testing:** Can trigger a data fetch and see results in UI ✅
 - Fixed: Database migration for MEDIUMTEXT payload column ✅
 
-**2. Daystart Pipeline + UI Integration** (3–5 days)
-- Implement analysis steps (Wyckoff, SMC, VSA, Delta, ICT, Merge)
-- OpenRouter integration for LLM calls
-- **Enhance UI:** Show intrastep timeline with expandable steps
-- **Testing:** Full pipeline visible in UI, can see each step's prompt/output
+**2. Daystart Pipeline + UI Integration** ✅ **COMPLETED** (3–5 days)
+- Implement analysis steps (Wyckoff, SMC, VSA, Delta, ICT, Merge) ✅
+- OpenRouter integration for LLM calls ✅
+- **Enhance UI:** Show intrastep timeline with expandable steps ✅ (Basic implementation)
+- **Testing:** Full pipeline visible in UI, can see each step's prompt/output ✅
+- Verified: All 6 steps execute successfully, costs tracked, Telegram post generated ✅
 
 **3. Polish UI** (1 day)
 - Improve run detail page with better formatting

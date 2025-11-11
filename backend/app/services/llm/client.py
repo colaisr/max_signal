@@ -2,7 +2,7 @@
 OpenRouter LLM client for making AI calls.
 """
 from openai import OpenAI
-from app.core.config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL, DEFAULT_LLM_MODEL
+from app.core.config import OPENROUTER_BASE_URL, DEFAULT_LLM_MODEL
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 import logging

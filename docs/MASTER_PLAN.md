@@ -7,7 +7,7 @@
 - **Triggering**: Manual at first; scheduled (daily; later hourly/1m/5m) after.
 - **Outputs**: 
   - UI to trigger and view runs with all intrastep data.
-  - Telegram channel post with the final merged analysis.
+  - Telegram direct messages to all users who started the bot with the final merged analysis.
 - **AI approach**: Heavy usage of LLM agents/tools; LLM provider switchable via OpenAI-compatible API using OpenRouter for simplicity and cost/uptime benefits (`https://openrouter.ai/`).
 
 Constraints and preferences:

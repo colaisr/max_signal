@@ -1,28 +1,67 @@
 """
 Telegram bot service for publishing analysis results.
 """
-from app.core.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID
 from typing import Optional
+from sqlalchemy.orm import Session
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Lazy import - only import if token is configured
 _telegram_bot = None
+_telegram_bot_token = None
 
 
-def get_telegram_bot():
-    """Get or create Telegram bot instance."""
-    global _telegram_bot
+def get_telegram_credentials(db: Optional[Session] = None) -> tuple[Optional[str], Optional[str]]:
+    """Get Telegram bot token and channel ID from Settings (AppSettings table).
     
-    if not TELEGRAM_BOT_TOKEN:
-        logger.warning("TELEGRAM_BOT_TOKEN not configured, Telegram publishing disabled")
+    Args:
+        db: Database session (required)
+    
+    Returns:
+        Tuple of (bot_token, channel_id) or (None, None) if not found
+    """
+    if not db:
+        logger.error("Database session required to read Telegram credentials from Settings")
+        return None, None
+    
+    try:
+        from app.models.settings import AppSettings
+        bot_token_setting = db.query(AppSettings).filter(
+            AppSettings.key == "telegram_bot_token"
+        ).first()
+        channel_id_setting = db.query(AppSettings).filter(
+            AppSettings.key == "telegram_channel_id"
+        ).first()
+        
+        bot_token = bot_token_setting.value if bot_token_setting and bot_token_setting.value else None
+        channel_id = channel_id_setting.value if channel_id_setting and channel_id_setting.value else None
+        
+        return bot_token, channel_id
+    except Exception as e:
+        logger.error(f"Failed to read Telegram credentials from Settings: {e}")
+        return None, None
+
+
+def get_telegram_bot(bot_token: Optional[str] = None):
+    """Get or create Telegram bot instance.
+    
+    Args:
+        bot_token: Optional bot token. If not provided, will use cached token.
+    """
+    global _telegram_bot, _telegram_bot_token
+    
+    if bot_token:
+        _telegram_bot_token = bot_token
+    
+    if not _telegram_bot_token:
+        logger.warning("Telegram bot token not configured")
         return None
     
-    if _telegram_bot is None:
+    if _telegram_bot is None or _telegram_bot_token != bot_token:
         try:
             from telegram import Bot
-            _telegram_bot = Bot(token=TELEGRAM_BOT_TOKEN)
+            _telegram_bot = Bot(token=_telegram_bot_token)
         except ImportError:
             logger.error("python-telegram-bot not installed. Run: pip install python-telegram-bot")
             return None
@@ -90,26 +129,36 @@ def split_message(text: str, max_length: int = 4096) -> list[str]:
     return final_chunks
 
 
-async def publish_to_telegram(message_text: str) -> dict:
+async def publish_to_telegram(message_text: str, db: Optional[Session] = None) -> dict:
     """Publish message to Telegram channel.
     
     Args:
         message_text: Text to publish
+        db: Database session to read credentials from Settings
     
     Returns:
         Dict with 'success', 'message_ids', 'error'
     """
-    bot = get_telegram_bot()
+    # Get credentials from Settings
+    bot_token, channel_id = get_telegram_credentials(db)
+    
+    if not bot_token:
+        return {
+            'success': False,
+            'error': 'Telegram bot token not configured. Please set it in Settings → Telegram Configuration'
+        }
+    
+    if not channel_id:
+        return {
+            'success': False,
+            'error': 'Telegram channel ID not configured. Please set it in Settings → Telegram Configuration'
+        }
+    
+    bot = get_telegram_bot(bot_token)
     if not bot:
         return {
             'success': False,
-            'error': 'Telegram bot not configured'
-        }
-    
-    if not TELEGRAM_CHANNEL_ID:
-        return {
-            'success': False,
-            'error': 'TELEGRAM_CHANNEL_ID not configured'
+            'error': 'Failed to initialize Telegram bot'
         }
     
     try:
@@ -124,7 +173,7 @@ async def publish_to_telegram(message_text: str) -> dict:
             
             # Send message
             message = await bot.send_message(
-                chat_id=TELEGRAM_CHANNEL_ID,
+                chat_id=channel_id,
                 text=chunk,
                 parse_mode=None  # Disable HTML parsing for now (can enable later if needed)
             )

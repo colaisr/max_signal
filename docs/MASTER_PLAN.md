@@ -452,7 +452,7 @@ Constraints and preferences:
 - [x] Analyses Page & Pipeline Configuration ✅ (Completed: List page, detail page with pipeline visualization, runs filtering, live updates)
 - [x] Authentication ✅ (Completed: Session-based auth, login/logout, route protection, admin user creation)
 - [x] Analysis Configuration Editing ✅ (Completed: Editable models, prompts, data sources before running)
-- [ ] Telegram Integration (backend complete, needs Settings page for credentials)
+- [x] Telegram Integration ✅ (Completed: Backend publish endpoint, message splitting, Settings page, credentials from AppSettings)
 - [ ] Refactor pipeline to use analysis_type configuration (accepts custom_config, needs full implementation)
 - [ ] Scheduling
 - [ ] Deployment (single VM)
@@ -546,12 +546,13 @@ Since we need to test and observe the analysis pipeline, we should build a **min
 - Custom config passed to backend ✅
 - **Testing:** Can edit config before running analysis ✅
 
-**9. Telegram Integration** ⏳ **PARTIAL** (0.5-1 day)
+**9. Telegram Integration** ✅ **COMPLETED** (0.5-1 day)
 - Backend publish endpoint ✅
 - Message splitting ✅
 - Frontend publish button ✅
-- **TODO:** Settings page for Telegram credentials
-- **Testing:** Can publish to Telegram (needs credentials configured)
+- Settings page for Telegram credentials ✅
+- Telegram publisher reads credentials from Settings (AppSettings table) ✅
+- **Testing:** Can publish to Telegram (credentials configured in Settings)
 
 **Why This Approach:**
 - ✅ Can test visually instead of just API calls

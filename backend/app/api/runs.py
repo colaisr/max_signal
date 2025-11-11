@@ -275,7 +275,7 @@ async def publish_run(run_id: int, db: Session = Depends(get_db)):
         }
     
     # Publish to Telegram
-    result = await publish_to_telegram(merge_step.output_blob)
+    result = await publish_to_telegram(merge_step.output_blob, db=db)
     
     # Save post record
     from datetime import datetime, timezone

@@ -119,6 +119,9 @@ export default function AnalysisDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['runs'] })
       router.push(`/runs/${data.id}`)
     },
+    onError: (error: any) => {
+      // Error is already handled by the UI below
+    },
   })
 
   // Initialize editable config when analysis loads
@@ -526,7 +529,13 @@ export default function AnalysisDetailPage() {
 
           {createRunMutation.isError && (
             <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 rounded text-red-700 dark:text-red-400">
-              Error: {createRunMutation.error instanceof Error ? createRunMutation.error.message : 'Failed to create run'}
+              Error: {
+                createRunMutation.error && typeof createRunMutation.error === 'object' && 'response' in createRunMutation.error
+                  ? (createRunMutation.error as any).response?.data?.detail || (createRunMutation.error as any).response?.data?.message || (createRunMutation.error as Error).message
+                  : createRunMutation.error instanceof Error
+                  ? createRunMutation.error.message
+                  : 'Failed to create run'
+              }
             </div>
           )}
         </div>

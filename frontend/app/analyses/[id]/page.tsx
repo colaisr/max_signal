@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useParams, useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
 
@@ -117,9 +117,23 @@ export default function AnalysisDetailPage() {
   })
 
   // Initialize editable config when analysis loads
-  if (analysis && !editableConfig) {
-    setEditableConfig(JSON.parse(JSON.stringify(analysis.config))) // Deep copy
-  }
+  useEffect(() => {
+    if (analysis && !editableConfig) {
+      setEditableConfig(JSON.parse(JSON.stringify(analysis.config))) // Deep copy
+    }
+  }, [analysis, editableConfig])
+
+  // Set defaults on load
+  useEffect(() => {
+    if (analysis) {
+      if (!selectedInstrument && analysis.config.default_instrument) {
+        setSelectedInstrument(analysis.config.default_instrument)
+      }
+      if (!selectedTimeframe && analysis.config.default_timeframe) {
+        setSelectedTimeframe(analysis.config.default_timeframe)
+      }
+    }
+  }, [analysis, selectedInstrument, selectedTimeframe])
 
   const handleRunAnalysis = () => {
     if (!selectedInstrument || !selectedTimeframe) {
@@ -151,6 +165,22 @@ export default function AnalysisDetailPage() {
     merge: '6️⃣ Merge & Telegram Post',
   }
 
+  const updateStepConfig = (stepIndex: number, field: keyof StepConfig, value: any) => {
+    if (!editableConfig) return
+    const newConfig = JSON.parse(JSON.stringify(editableConfig))
+    newConfig.steps[stepIndex] = { ...newConfig.steps[stepIndex], [field]: value }
+    setEditableConfig(newConfig)
+  }
+
+  const resetConfig = () => {
+    if (analysis) {
+      setEditableConfig(JSON.parse(JSON.stringify(analysis.config)))
+      setIsEditing(false)
+    }
+  }
+
+  const configToUse = editableConfig || analysis?.config
+
   if (isLoading) {
     return (
       <div className="p-8">
@@ -174,32 +204,6 @@ export default function AnalysisDetailPage() {
       </div>
     )
   }
-
-  // Set defaults on load
-  if (analysis) {
-    if (!selectedInstrument && analysis.config.default_instrument) {
-      setSelectedInstrument(analysis.config.default_instrument)
-    }
-    if (!selectedTimeframe && analysis.config.default_timeframe) {
-      setSelectedTimeframe(analysis.config.default_timeframe)
-    }
-  }
-
-  const updateStepConfig = (stepIndex: number, field: keyof StepConfig, value: any) => {
-    if (!editableConfig) return
-    const newConfig = JSON.parse(JSON.stringify(editableConfig))
-    newConfig.steps[stepIndex] = { ...newConfig.steps[stepIndex], [field]: value }
-    setEditableConfig(newConfig)
-  }
-
-  const resetConfig = () => {
-    if (analysis) {
-      setEditableConfig(JSON.parse(JSON.stringify(analysis.config)))
-      setIsEditing(false)
-    }
-  }
-
-  const configToUse = editableConfig || analysis?.config
 
   return (
     <div className="p-8">

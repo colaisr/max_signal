@@ -83,23 +83,29 @@ Constraints and preferences:
 
 ### 3a) UX Specification
 
-- Information architecture
-  - Dashboard: quick Daystart trigger, recent runs, system status; watchlist of instruments/timeframes.
-  - Run history: filterable table (instrument, timeframe, status, model, date), bulk actions.
-  - Run detail: step timeline (Wyckoff, SMC, VSA, Delta, ICT, Merge) with expandable prompts/outputs, model, tokens/cost; final Telegram preview; publish/copy.
-  - Research Lab: prompt playground with model switching; save experiments as templates.
-  - Signals: feed of generated signals with direction/entry/stop/targets; filters; future subscriptions.
-  - Backtesting: scenario builder (date range, instruments), results table (win rate, RR), chart overlays.
-  - Settings: models/routing, data sources/instruments, Telegram config, scheduler.
+**📋 See `PRODUCT_ARCHITECTURE.md` for comprehensive UX/UI specification.**
 
-- Patterns
-  - Left sidebar nav; topbar status chips; dark-first theme.
-  - Timeline + accordions for steps; stream outputs when available.
-  - Prompt versioning with inline diff; instrument picker and timeframe chips; transparency cues (data source/time, model, tokens/cost).
-  - Keyboard shortcuts: N (new run), R (retry), P (publish).
+**Quick Summary:**
+- **Navigation Structure**: Home, Analyses, Runs, Schedules, Settings, Backtesting
+- **Key Pages**:
+  - **Home (`/`)**: Landing page with product overview, quick stats, recent activity
+  - **Analyses (`/analyses`)**: Browse and configure analysis types/pipelines
+    - List view: All available analysis types
+    - Detail view: Pipeline visualization, step configuration (models, prompts, data sources)
+    - Users can see complete pipeline before running, including LLM models and prompts per step
+  - **Runs (`/runs`)**: View all analysis runs (history, status, results)
+  - **Schedules (`/schedules`)**: Manage scheduled analysis jobs
+  - **Settings (`/settings`)**: User preferences, model config, data sources, Telegram
+- **Analysis Type Architecture**: Extensible system supporting multiple analysis types (Daystart, Intraday SMC, Weekly Overview, Custom)
+- **User Roles**: Admin (full access) and Trader (view + run, no config changes)
+- **Pipeline Transparency**: Users can view complete pipeline configuration including:
+  - Step sequence
+  - LLM model per step
+  - System and user prompts
+  - Data sources/tools used
+  - Estimated cost and duration
 
-- MVP pages
-  - Dashboard, Run history, Run detail, Settings (core), minimal Research Lab (single step).
+**Full specification**: See `docs/PRODUCT_ARCHITECTURE.md`
 
 
 ### 4) Daystart Analysis Pipeline (MVP Feature)

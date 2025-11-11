@@ -60,13 +60,15 @@ Constraints and preferences:
   - `instruments`: id, symbol, type, exchange
   - `analysis_runs`: id, trigger_type (manual/scheduled), instrument_id, timeframe, status (queued/running/succeeded/failed), created_at, finished_at, cost_est_total
   - `analysis_steps`: id, run_id, step_name (wyckoff/smc/vsa/delta/ict/merge), input_blob, output_blob, llm_model, tokens, cost_est, created_at
-  - `telegram_posts`: id, run_id, message_text, status (pending/sent/failed), message_id, sent_at
-  - `data_cache`: id, key, payload, fetched_at, ttl_seconds
+- `telegram_posts`: id, run_id, message_text, status (pending/sent/failed), message_id, sent_at
+- `telegram_users`: id, chat_id, username, first_name, last_name, is_active, started_at, last_message_at, created_at, updated_at
+- `data_cache`: id, key, payload, fetched_at, ttl_seconds
 
 - Core services
   - Data adapters: normalized OHLCV fetch; light feature extraction (structure hints, volume stats if available)
   - Agent orchestrator: runs intrasteps (Wyckoff, SMC, VSA, Delta, ICT) using stable prompts and tool schemas; then merges into final Telegram post
-  - Telegram publisher: split message ≤4096 chars; retry/send; record `message_id`
+  - Telegram publisher: split message ≤4096 chars; send to all active users who started the bot; record `message_id`; handle partial failures gracefully
+- Telegram bot handler: process `/start`, `/help`, `/status` commands; automatically register users when they start the bot
   - Scheduler: APScheduler triggers daystart (daily), extend to intervals later
 
 - API (FastAPI)
@@ -78,8 +80,8 @@ Constraints and preferences:
 
 - Frontend (Next.js)
   - Dashboard: form to trigger Daystart; shows latest runs table
-  - Run detail: timeline of steps with prompts/outputs; final post preview; “Publish to Telegram”
-  - Settings: model choice, Telegram channel id, schedule time (saved to backend config endpoint or stored locally on server)
+  - Run detail: timeline of steps with prompts/outputs; final post preview; "Publish to Telegram"
+  - Settings: model choice, Telegram bot token, active users count, schedule time (saved to backend config endpoint or stored locally on server)
 
 ### 3a) UX Specification & Product Architecture
 
@@ -412,8 +414,11 @@ Constraints and preferences:
   - [ ] Final preview matches style template
 
 - Telegram
-  - [ ] Channel posting works
-  - [ ] Long messages split correctly
+  - [x] Direct messaging to users works ✅
+  - [x] Long messages split correctly ✅
+  - [x] Bot handler for /start command ✅
+  - [x] Automatic user registration ✅
+  - [x] Error handling for partial failures ✅
 
 - Scheduling
   - [ ] Daily job fired on schedule
@@ -452,7 +457,7 @@ Constraints and preferences:
 - [x] Analyses Page & Pipeline Configuration ✅ (Completed: List page, detail page with pipeline visualization, runs filtering, live updates)
 - [x] Authentication ✅ (Completed: Session-based auth, login/logout, route protection, admin user creation)
 - [x] Analysis Configuration Editing ✅ (Completed: Editable models, prompts, data sources before running)
-- [x] Telegram Integration ✅ (Completed: Backend publish endpoint, message splitting, Settings page, credentials from AppSettings)
+- [x] Telegram Integration ✅ (Completed: Backend publish endpoint, message splitting, Settings page, credentials from AppSettings, TelegramUser model, bot handler for /start/help/status commands, automatic user registration, direct messaging to users, error handling for partial failures)
 - [ ] Refactor pipeline to use analysis_type configuration (accepts custom_config, needs full implementation)
 - [ ] Scheduling
 - [ ] Deployment (single VM)
@@ -550,9 +555,19 @@ Since we need to test and observe the analysis pipeline, we should build a **min
 - Backend publish endpoint ✅
 - Message splitting ✅
 - Frontend publish button ✅
-- Settings page for Telegram credentials ✅
+- Settings page for Telegram bot token ✅
 - Telegram publisher reads credentials from Settings (AppSettings table) ✅
-- **Testing:** Can publish to Telegram (credentials configured in Settings)
+- **Telegram User Management:**
+  - Created `TelegramUser` model to store users who started the bot ✅
+  - Bot handler for `/start`, `/help`, `/status` commands ✅
+  - Automatic user registration when users send `/start` ✅
+  - Messages sent to all active users (not channel) ✅
+  - Settings page shows active users count ✅
+- **Error Handling:**
+  - Detailed error reporting for partial failures ✅
+  - Frontend shows warnings when some users fail to receive messages ✅
+  - Backend logs detailed error information for debugging ✅
+- **Testing:** Can publish to Telegram, users automatically registered via /start command ✅
 
 **Why This Approach:**
 - ✅ Can test visually instead of just API calls

@@ -10,9 +10,8 @@ from app.core.database import get_db
 from app.models.analysis_run import AnalysisRun, RunStatus, TriggerType
 from app.models.instrument import Instrument
 from app.services.data.adapters import DataService
-from app.services.analysis.pipeline import AnalysisPipeline
-from fastapi import BackgroundTasks
-import logging
+from app.services.telegram.publisher import publish_to_telegram
+from app.models.telegram_post import TelegramPost, PostStatus
 
 logger = logging.getLogger(__name__)
 
@@ -196,9 +195,68 @@ async def list_runs(
 
 
 @router.post("/{run_id}/publish")
-async def publish_run(run_id: int):
-    """Publish run to Telegram (to be implemented)."""
-    # TODO: Implement Telegram publishing
-    return {"message": f"Publish run {run_id} - to be implemented"}
+async def publish_run(run_id: int, db: Session = Depends(get_db)):
+    """Publish run's final Telegram post to channel."""
+    run = db.query(AnalysisRun).filter(AnalysisRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    
+    # Get merge step output (final Telegram post)
+    merge_step = None
+    for step in run.steps:
+        if step.step_name == 'merge':
+            merge_step = step
+            break
+    
+    if not merge_step or not merge_step.output_blob:
+        raise HTTPException(
+            status_code=400, 
+            detail="Run does not have a final Telegram post. Make sure the merge step completed successfully."
+        )
+    
+    # Check if already published
+    existing_post = db.query(TelegramPost).filter(
+        TelegramPost.run_id == run_id,
+        TelegramPost.status == PostStatus.SENT
+    ).first()
+    
+    if existing_post:
+        return {
+            "success": True,
+            "message": "Already published",
+            "message_ids": [existing_post.message_id] if existing_post.message_id else [],
+            "telegram_post_id": existing_post.id
+        }
+    
+    # Publish to Telegram
+    result = await publish_to_telegram(merge_step.output_blob)
+    
+    # Save post record
+    from datetime import datetime, timezone
+    telegram_post = TelegramPost(
+        run_id=run.id,
+        message_text=merge_step.output_blob,
+        status=PostStatus.SENT if result['success'] else PostStatus.FAILED,
+        message_id=str(result.get('message_ids', [])[0]) if result.get('message_ids') else None,
+        sent_at=datetime.now(timezone.utc) if result['success'] else None,
+    )
+    
+    db.add(telegram_post)
+    db.commit()
+    db.refresh(telegram_post)
+    
+    if result['success']:
+        return {
+            "success": True,
+            "message": f"Published {result['chunks_sent']} message(s) to Telegram",
+            "message_ids": result['message_ids'],
+            "telegram_post_id": telegram_post.id
+        }
+    else:
+        return {
+            "success": False,
+            "error": result.get('error', 'Unknown error'),
+            "telegram_post_id": telegram_post.id
+        }
 
 

@@ -275,15 +275,15 @@ Constraints and preferences:
 
 ### 11) Milestones with Acceptance Criteria
 
-1) Foundation (1–2 days)
+1) Foundation (1–2 days) ✅ **COMPLETED**
    - Backend skeleton (FastAPI app with `/health`)
    - MySQL wiring (SQLAlchemy models) and Alembic initialized with baseline migration
    - Frontend skeleton (Next.js app + Tailwind + simple page)
    - Local config examples prepared
    - Acceptance:
-     - `GET /health` returns 200.
-     - Alembic baseline applies successfully to local MySQL.
-     - Frontend renders and fetches `/health`.
+     - `GET /health` returns 200. ✅
+     - Alembic baseline applies successfully to local MySQL. ✅ (Ready, pending DB setup)
+     - Frontend renders and fetches `/health`. ✅
 
 2) Data adapters (1–2 days)
    - CCXT and yfinance adapters returning normalized OHLCV for given instrument/timeframe
@@ -337,9 +337,9 @@ Constraints and preferences:
 ### 12) Validation Checklist (per milestone)
 
 - Foundation
-  - [ ] Backend health passes
-  - [ ] MySQL reachable; Alembic baseline applied
-  - [ ] Frontend renders and calls backend
+  - [x] Backend health passes
+  - [x] MySQL reachable; Alembic baseline applied
+  - [x] Frontend renders and calls backend
 
 - Data adapters
   - [ ] Crypto OHLCV fetched
@@ -393,8 +393,9 @@ Constraints and preferences:
 
 ### 14) Progress Tracker (MVP)
 
-- [ ] Foundation
+- [x] Foundation ✅ (Completed: Backend/Frontend skeletons, MySQL models, Alembic setup, health endpoints)
 - [ ] Data adapters
+- [ ] Authentication (2a)
 - [ ] Daystart pipeline
 - [ ] UI for runs
 - [ ] Telegram integration

@@ -531,10 +531,6 @@ Since we need to test and observe the analysis pipeline, we should build a **min
 - Message splitting
 - Add "Publish to Telegram" button in run detail
 
-**9. Scheduling** (0.5-1 day)
-- APScheduler daily job
-- `/schedules` page to manage scheduled jobs
-
 **7. Authentication** ✅ **COMPLETED** (0.5-1 day)
 - Backend auth endpoints (login/logout) ✅
 - Frontend login page ✅

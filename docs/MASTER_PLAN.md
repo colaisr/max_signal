@@ -450,9 +450,10 @@ Constraints and preferences:
 - [x] Polish UI ✅ (Completed: Enhanced step display, Telegram preview, expandable timeline, copy functionality)
 - [x] Navigation & Layout ✅ (Completed: Navigation bar, shared layout, all pages updated)
 - [x] Analyses Page & Pipeline Configuration ✅ (Completed: List page, detail page with pipeline visualization, runs filtering, live updates)
-- [ ] Refactor pipeline to use analysis_type configuration (optional optimization)
-- [ ] Authentication (admin-only)
-- [ ] Telegram Integration
+- [x] Authentication ✅ (Completed: Session-based auth, login/logout, route protection, admin user creation)
+- [x] Analysis Configuration Editing ✅ (Completed: Editable models, prompts, data sources before running)
+- [ ] Telegram Integration (backend complete, needs Settings page for credentials)
+- [ ] Refactor pipeline to use analysis_type configuration (accepts custom_config, needs full implementation)
 - [ ] Scheduling
 - [ ] Deployment (single VM)
 - [ ] Backtesting (Phase 2)
@@ -534,10 +535,27 @@ Since we need to test and observe the analysis pipeline, we should build a **min
 - APScheduler daily job
 - `/schedules` page to manage scheduled jobs
 
-**10. Deployment** (1-2 days)
-- Single VM setup
-- Systemd services
-- Deploy scripts
+**7. Authentication** ✅ **COMPLETED** (0.5-1 day)
+- Backend auth endpoints (login/logout) ✅
+- Frontend login page ✅
+- Session management ✅
+- Route protection ✅
+- Admin user creation script ✅
+- **Testing:** Can login, logout, protected routes work ✅
+
+**8. Analysis Configuration Editing** ✅ **COMPLETED** (1 day)
+- Editable configuration UI in analysis detail page ✅
+- Edit models, prompts, temperature, max_tokens, data sources ✅
+- Reset to defaults functionality ✅
+- Custom config passed to backend ✅
+- **Testing:** Can edit config before running analysis ✅
+
+**9. Telegram Integration** ⏳ **PARTIAL** (0.5-1 day)
+- Backend publish endpoint ✅
+- Message splitting ✅
+- Frontend publish button ✅
+- **TODO:** Settings page for Telegram credentials
+- **Testing:** Can publish to Telegram (needs credentials configured)
 
 **Why This Approach:**
 - ✅ Can test visually instead of just API calls

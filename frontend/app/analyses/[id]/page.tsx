@@ -41,12 +41,21 @@ async function fetchAnalysisType(id: string) {
   return data
 }
 
-async function createRun(analysisTypeId: number, instrument: string, timeframe: string) {
-  const { data } = await axios.post(`${API_BASE_URL}/api/runs`, {
+async function createRun(
+  analysisTypeId: number, 
+  instrument: string, 
+  timeframe: string,
+  customConfig?: AnalysisType['config']
+) {
+  const payload: any = {
     analysis_type_id: analysisTypeId,
     instrument,
     timeframe,
-  })
+  }
+  if (customConfig) {
+    payload.custom_config = customConfig
+  }
+  const { data } = await axios.post(`${API_BASE_URL}/api/runs`, payload)
   return data
 }
 
@@ -58,6 +67,8 @@ export default function AnalysisDetailPage() {
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
   const [selectedInstrument, setSelectedInstrument] = useState<string>('')
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('')
+  const [editableConfig, setEditableConfig] = useState<AnalysisType['config'] | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
 
   const { data: analysis, isLoading, error } = useQuery({
     queryKey: ['analysis-type', analysisId],
@@ -66,12 +77,17 @@ export default function AnalysisDetailPage() {
 
   const createRunMutation = useMutation({
     mutationFn: ({ instrument, timeframe }: { instrument: string; timeframe: string }) =>
-      createRun(analysis?.id || 0, instrument, timeframe),
+      createRun(analysis?.id || 0, instrument, timeframe, editableConfig || undefined),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['runs'] })
       router.push(`/runs/${data.id}`)
     },
   })
+
+  // Initialize editable config when analysis loads
+  if (analysis && !editableConfig) {
+    setEditableConfig(JSON.parse(JSON.stringify(analysis.config))) // Deep copy
+  }
 
   const handleRunAnalysis = () => {
     if (!selectedInstrument || !selectedTimeframe) {
@@ -128,12 +144,30 @@ export default function AnalysisDetailPage() {
   }
 
   // Set defaults on load
-  if (!selectedInstrument && analysis.config.default_instrument) {
-    setSelectedInstrument(analysis.config.default_instrument)
+  if (analysis) {
+    if (!selectedInstrument && analysis.config.default_instrument) {
+      setSelectedInstrument(analysis.config.default_instrument)
+    }
+    if (!selectedTimeframe && analysis.config.default_timeframe) {
+      setSelectedTimeframe(analysis.config.default_timeframe)
+    }
   }
-  if (!selectedTimeframe && analysis.config.default_timeframe) {
-    setSelectedTimeframe(analysis.config.default_timeframe)
+
+  const updateStepConfig = (stepIndex: number, field: keyof StepConfig, value: any) => {
+    if (!editableConfig) return
+    const newConfig = JSON.parse(JSON.stringify(editableConfig))
+    newConfig.steps[stepIndex] = { ...newConfig.steps[stepIndex], [field]: value }
+    setEditableConfig(newConfig)
   }
+
+  const resetConfig = () => {
+    if (analysis) {
+      setEditableConfig(JSON.parse(JSON.stringify(analysis.config)))
+      setIsEditing(false)
+    }
+  }
+
+  const configToUse = editableConfig || analysis?.config
 
   return (
     <div className="p-8">
@@ -186,12 +220,47 @@ export default function AnalysisDetailPage() {
 
         {/* Pipeline Visualization */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Pipeline Steps
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Pipeline Steps
+            </h2>
+            <div className="flex gap-2">
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={resetConfig}
+                    className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded"
+                  >
+                    Done Editing
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-3 py-1 text-sm bg-green-600 hover:bg-green-700 text-white rounded"
+                >
+                  ✏️ Edit Configuration
+                </button>
+              )}
+            </div>
+          </div>
+
+          {isEditing && (
+            <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded">
+              <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                ⚠️ You're editing the configuration. Changes will be used when you run the analysis.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-3">
-            {analysis.config.steps.map((step, index) => {
+            {configToUse?.steps.map((step, index) => {
               const isExpanded = expandedSteps.has(step.step_name)
               const stepLabel = stepNames[step.step_name] || step.step_name
 
@@ -233,28 +302,68 @@ export default function AnalysisDetailPage() {
                           <div className="bg-white dark:bg-gray-800 rounded p-3 text-sm border border-gray-200 dark:border-gray-700">
                             <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <span className="text-gray-500 dark:text-gray-400">Model:</span>
-                                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                                  {step.model}
-                                </span>
+                                <label className="text-gray-500 dark:text-gray-400">Model:</label>
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={step.model}
+                                    onChange={(e) => updateStepConfig(index, 'model', e.target.value)}
+                                    className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                  />
+                                ) : (
+                                  <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                                    {step.model}
+                                  </span>
+                                )}
                               </div>
                               <div>
-                                <span className="text-gray-500 dark:text-gray-400">Temperature:</span>
-                                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                                  {step.temperature}
-                                </span>
+                                <label className="text-gray-500 dark:text-gray-400">Temperature:</label>
+                                {isEditing ? (
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    max="2"
+                                    value={step.temperature}
+                                    onChange={(e) => updateStepConfig(index, 'temperature', parseFloat(e.target.value))}
+                                    className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                  />
+                                ) : (
+                                  <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                                    {step.temperature}
+                                  </span>
+                                )}
                               </div>
                               <div>
-                                <span className="text-gray-500 dark:text-gray-400">Max Tokens:</span>
-                                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                                  {step.max_tokens.toLocaleString()}
-                                </span>
+                                <label className="text-gray-500 dark:text-gray-400">Max Tokens:</label>
+                                {isEditing ? (
+                                  <input
+                                    type="number"
+                                    value={step.max_tokens}
+                                    onChange={(e) => updateStepConfig(index, 'max_tokens', parseInt(e.target.value))}
+                                    className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                  />
+                                ) : (
+                                  <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                                    {step.max_tokens.toLocaleString()}
+                                  </span>
+                                )}
                               </div>
                               <div>
-                                <span className="text-gray-500 dark:text-gray-400">Data Sources:</span>
-                                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                                  {step.data_sources.join(', ')}
-                                </span>
+                                <label className="text-gray-500 dark:text-gray-400">Data Sources:</label>
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={step.data_sources.join(', ')}
+                                    onChange={(e) => updateStepConfig(index, 'data_sources', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                                    placeholder="ccxt, yfinance"
+                                    className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                  />
+                                ) : (
+                                  <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                                    {step.data_sources.join(', ')}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -265,9 +374,18 @@ export default function AnalysisDetailPage() {
                           <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">
                             System Prompt
                           </p>
-                          <div className="bg-white dark:bg-gray-800 rounded p-3 text-xs text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-                            <pre className="whitespace-pre-wrap">{step.system_prompt}</pre>
-                          </div>
+                          {isEditing ? (
+                            <textarea
+                              value={step.system_prompt}
+                              onChange={(e) => updateStepConfig(index, 'system_prompt', e.target.value)}
+                              rows={6}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs font-mono"
+                            />
+                          ) : (
+                            <div className="bg-white dark:bg-gray-800 rounded p-3 text-xs text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                              <pre className="whitespace-pre-wrap">{step.system_prompt}</pre>
+                            </div>
+                          )}
                         </div>
 
                         {/* User Prompt Template */}
@@ -275,12 +393,21 @@ export default function AnalysisDetailPage() {
                           <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">
                             User Prompt Template
                           </p>
-                          <div className="bg-white dark:bg-gray-800 rounded p-3 text-xs text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-                            <pre className="whitespace-pre-wrap">{step.user_prompt_template}</pre>
-                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">
-                              Variables: {step.user_prompt_template.match(/\{(\w+)\}/g)?.join(', ') || 'None'}
-                            </p>
-                          </div>
+                          {isEditing ? (
+                            <textarea
+                              value={step.user_prompt_template}
+                              onChange={(e) => updateStepConfig(index, 'user_prompt_template', e.target.value)}
+                              rows={6}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs font-mono"
+                            />
+                          ) : (
+                            <div className="bg-white dark:bg-gray-800 rounded p-3 text-xs text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                              <pre className="whitespace-pre-wrap">{step.user_prompt_template}</pre>
+                              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">
+                                Variables: {step.user_prompt_template.match(/\{(\w+)\}/g)?.join(', ') || 'None'}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

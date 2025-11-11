@@ -41,6 +41,7 @@ class AnalysisPipeline:
         self,
         run: AnalysisRun,
         db: Session,
+        custom_config: Optional[Dict[str, Any]] = None,
     ) -> AnalysisRun:
         """Execute the complete analysis pipeline.
         

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useRequireAuth } from '@/hooks/useAuth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
 
@@ -52,6 +53,8 @@ async function createRun(instrument: string, timeframe: string) {
 export default function Home() {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { isLoading: authLoading } = useRequireAuth()
+  
   const [selectedInstrument, setSelectedInstrument] = useState<string>('')
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('H1')
 
@@ -105,6 +108,16 @@ export default function Home() {
       default:
         return 'text-gray-600 dark:text-gray-400'
     }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-7xl mx-auto">
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

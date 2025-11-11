@@ -1,7 +1,8 @@
 """
 Analysis runs endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+import logging
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
@@ -23,6 +24,7 @@ class CreateRunRequest(BaseModel):
     instrument: str
     timeframe: str  # M1, M5, M15, H1, D1, etc.
     analysis_type_id: Optional[int] = None  # Optional for backward compatibility
+    custom_config: Optional[dict] = None  # Optional custom configuration override
 
 
 class RunStepResponse(BaseModel):
@@ -109,7 +111,9 @@ async def create_run(
         try:
             bg_run = bg_db.query(AnalysisRun).filter(AnalysisRun.id == run.id).first()
             if bg_run:
-                pipeline.run(bg_run, bg_db)
+                # Pass custom_config if provided
+                custom_config = request.custom_config if hasattr(request, 'custom_config') else None
+                pipeline.run(bg_run, bg_db, custom_config=custom_config)
         except Exception as e:
             logger.error(f"Pipeline execution failed: {e}")
         finally:

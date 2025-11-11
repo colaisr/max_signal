@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useState } from 'react'
-import { useRequireAuth } from '@/hooks/useAuth'
+import { useRequireAuth, useAuth } from '@/hooks/useAuth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
 
@@ -91,6 +91,7 @@ async function updateOpenRouterSettings(api_key: string | null) {
 
 export default function SettingsPage() {
   const { isLoading: authLoading } = useRequireAuth()
+  const { isAdmin } = useAuth()
   const queryClient = useQueryClient()
   
   const [telegramBotToken, setTelegramBotToken] = useState('')
@@ -165,6 +166,20 @@ export default function SettingsPage() {
       <div className="p-8">
         <div className="max-w-7xl mx-auto">
           <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 rounded p-4">
+            <p className="text-red-700 dark:text-red-400">
+              Admin access required to view settings.
+            </p>
+          </div>
         </div>
       </div>
     )

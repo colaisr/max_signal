@@ -95,6 +95,8 @@ export default function SettingsPage() {
   
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [openRouterKey, setOpenRouterKey] = useState('')
+  const [showTelegramToken, setShowTelegramToken] = useState(false)
+  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false)
   const telegramInitialized = useRef(false)
   const openRouterInitialized = useRef(false)
 
@@ -351,13 +353,32 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                 Bot Token
               </label>
-              <input
-                type="password"
-                value={telegramBotToken}
-                onChange={(e) => setTelegramBotToken(e.target.value)}
-                placeholder="Get from @BotFather"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
+              <div className="relative">
+                <input
+                  type={showTelegramToken ? "text" : "password"}
+                  value={telegramBotToken}
+                  onChange={(e) => setTelegramBotToken(e.target.value)}
+                  placeholder="Get from @BotFather"
+                  className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowTelegramToken(!showTelegramToken)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
+                  aria-label={showTelegramToken ? "Hide token" : "Show token"}
+                >
+                  {showTelegramToken ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.29 3.29m0 0L9.88 9.88m-3.59-3.59L3 3m6.29 6.29L9.88 9.88" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
               {telegramSettings?.bot_token_masked && (
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Current: {telegramSettings.bot_token_masked}
@@ -389,13 +410,32 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                 API Key
               </label>
-              <input
-                type="password"
-                value={openRouterKey}
-                onChange={(e) => setOpenRouterKey(e.target.value)}
-                placeholder="Get from https://openrouter.ai"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
+              <div className="relative">
+                <input
+                  type={showOpenRouterKey ? "text" : "password"}
+                  value={openRouterKey}
+                  onChange={(e) => setOpenRouterKey(e.target.value)}
+                  placeholder="Get from https://openrouter.ai"
+                  className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowOpenRouterKey(!showOpenRouterKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
+                  aria-label={showOpenRouterKey ? "Hide API key" : "Show API key"}
+                >
+                  {showOpenRouterKey ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.29 3.29m0 0L9.88 9.88m-3.59-3.59L3 3m6.29 6.29L9.88 9.88" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
               {openRouterSettings?.api_key_masked && (
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Current: {openRouterSettings.api_key_masked}

@@ -54,7 +54,7 @@ Constraints and preferences:
   - Backend service: APIs, agent orchestration, data adapters, scheduling, persistence
   - Frontend app: trigger runs, view details, publish to Telegram
   - Telegram Bot Publisher: posts final message to the channel, handles message splitting and retries
-  - Data Providers: CCXT, yfinance (others later)
+  - Data Providers: CCXT (crypto), yfinance (equities), Tinkoff Invest API (MOEX)
 
 - Data model (MySQL)
   - `instruments`: id, symbol, type, exchange, figi (Tinkoff FIGI for MOEX instruments), is_enabled (admin toggle for dropdown visibility)

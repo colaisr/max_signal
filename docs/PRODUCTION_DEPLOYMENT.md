@@ -208,9 +208,22 @@ WantedBy=multi-user.target
 
 **Deploy Scripts** (in `/srv/max-signal/scripts/`):
 
+**Important:** The deployment scripts are part of the git repository. When you pull latest changes, the scripts are automatically updated. Always use the scripts from the git repo:
+
+```bash
+cd /srv/max-signal
+./scripts/deploy.sh  # Use script from git repo
+```
+
+**If you have a copy at `/usr/local/bin/max-signal-deploy`:**
+- Remove it: `sudo rm /usr/local/bin/max-signal-deploy`
+- Or create a symlink: `sudo ln -s /srv/max-signal/scripts/deploy.sh /usr/local/bin/max-signal-deploy`
+- This ensures you always use the latest version from git
+
 1. **`deploy.sh`** - Complete deployment preparation:
-   - Pulls latest changes from repository
+   - Pulls latest changes from repository (including script updates)
    - Updates backend dependencies (`requirements.txt`)
+   - **Verifies critical packages are installed** (tinkoff-investments, apimoex, etc.)
    - Runs database migrations
    - Updates frontend dependencies (`package.json`)
    - Builds frontend for production

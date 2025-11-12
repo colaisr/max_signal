@@ -28,6 +28,15 @@ interface DataSource {
   is_enabled: boolean
 }
 
+interface Instrument {
+  symbol: string
+  type: string
+  exchange: string | null
+  display_name: string
+  is_enabled: boolean
+  id: number | null
+}
+
 async function fetchModels() {
   const { data } = await axios.get<Model[]>(`${API_BASE_URL}/api/settings/models`)
   return data
@@ -88,6 +97,22 @@ async function updateOpenRouterSettings(api_key: string | null) {
   return data
 }
 
+async function fetchAllInstruments() {
+  const { data } = await axios.get<Instrument[]>(`${API_BASE_URL}/api/instruments/all`, {
+    withCredentials: true
+  })
+  return data
+}
+
+async function toggleInstrument(symbol: string) {
+  const { data } = await axios.put(
+    `${API_BASE_URL}/api/instruments/toggle`,
+    { symbol },
+    { withCredentials: true }
+  )
+  return data
+}
+
 export default function SettingsPage() {
   const { isLoading: authLoading } = useRequireAuth()
   const { isAdmin } = useAuth()
@@ -99,6 +124,8 @@ export default function SettingsPage() {
   const [showOpenRouterKey, setShowOpenRouterKey] = useState(false)
   const telegramInitialized = useRef(false)
   const openRouterInitialized = useRef(false)
+  const [instrumentSearch, setInstrumentSearch] = useState('')
+  const [instrumentTypeFilter, setInstrumentTypeFilter] = useState<'all' | 'crypto' | 'equity'>('all')
 
   const { data: models = [], isLoading: modelsLoading } = useQuery({
     queryKey: ['settings', 'models'],
@@ -119,6 +146,12 @@ export default function SettingsPage() {
   const { data: openRouterSettings } = useQuery({
     queryKey: ['settings', 'openrouter'],
     queryFn: fetchOpenRouterSettings,
+    enabled: !authLoading,
+  })
+
+  const { data: allInstruments = [], isLoading: instrumentsLoading } = useQuery({
+    queryKey: ['instruments', 'all'],
+    queryFn: fetchAllInstruments,
     enabled: !authLoading,
   })
 
@@ -169,6 +202,36 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['settings', 'openrouter'] })
       alert('OpenRouter settings saved!')
     },
+  })
+
+  const toggleInstrumentMutation = useMutation({
+    mutationFn: toggleInstrument,
+    onSuccess: (data) => {
+      // Optimistically update the cache
+      queryClient.setQueryData(['instruments', 'all'], (old: Instrument[] | undefined) => {
+        if (!old) return old
+        return old.map(inst => 
+          inst.symbol === data.symbol 
+            ? { ...inst, is_enabled: data.is_enabled, id: data.id }
+            : inst
+        )
+      })
+      // Also invalidate to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['instruments', 'all'] })
+      queryClient.invalidateQueries({ queryKey: ['instruments'] })
+    },
+    onError: (error) => {
+      console.error('Failed to toggle instrument:', error)
+      alert('Failed to toggle instrument. Please try again.')
+    },
+  })
+
+  // Filter instruments based on search and type
+  const filteredInstruments = allInstruments.filter((inst) => {
+    const matchesSearch = inst.symbol.toLowerCase().includes(instrumentSearch.toLowerCase()) ||
+                         inst.display_name.toLowerCase().includes(instrumentSearch.toLowerCase())
+    const matchesType = instrumentTypeFilter === 'all' || inst.type === instrumentTypeFilter
+    return matchesSearch && matchesType
   })
 
   if (authLoading) {
@@ -330,6 +393,106 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Available Instruments Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Available Instruments
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Enable or disable instruments. Only enabled instruments will appear in dropdowns throughout the application.
+            {filteredInstruments.length > 0 && (
+              <span className="ml-2 font-medium text-blue-600 dark:text-blue-400">
+                {filteredInstruments.length} instrument{filteredInstruments.length !== 1 ? 's' : ''} found
+              </span>
+            )}
+          </p>
+
+          {instrumentsLoading ? (
+            <p className="text-gray-600 dark:text-gray-400">Loading instruments...</p>
+          ) : (
+            <div className="space-y-4">
+              {/* Search and Filter Controls */}
+              <div className="flex gap-4 items-center">
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    placeholder="Search instruments by symbol or name..."
+                    value={instrumentSearch}
+                    onChange={(e) => setInstrumentSearch(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  />
+                </div>
+                <select
+                  value={instrumentTypeFilter}
+                  onChange={(e) => setInstrumentTypeFilter(e.target.value as 'all' | 'crypto' | 'equity')}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="all">All Types</option>
+                  <option value="crypto">Crypto</option>
+                  <option value="equity">Equity</option>
+                </select>
+              </div>
+
+              {/* Scrollable Instrument List */}
+              {filteredInstruments.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  No instruments found matching your search.
+                </div>
+              ) : (
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg">
+                  {/* Scrollable container - shows ~10 items at a time, scrollable to see more */}
+                  <div 
+                    className="overflow-y-auto"
+                    style={{ maxHeight: '500px' }}
+                  >
+                    {filteredInstruments.map((instrument) => (
+                      <div
+                        key={instrument.symbol}
+                        className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-1">
+                              <span className="font-semibold text-gray-900 dark:text-white">
+                                {instrument.display_name}
+                              </span>
+                              <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
+                                {instrument.symbol}
+                              </span>
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                instrument.type === 'crypto' 
+                                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                  : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                              }`}>
+                                {instrument.type}
+                              </span>
+                              {instrument.exchange && (
+                                <span className="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900/30 rounded text-purple-700 dark:text-purple-400">
+                                  {instrument.exchange}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer ml-4">
+                            <input
+                              type="checkbox"
+                              checked={instrument.is_enabled}
+                              onChange={() => toggleInstrumentMutation.mutate(instrument.symbol)}
+                              disabled={toggleInstrumentMutation.isPending}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

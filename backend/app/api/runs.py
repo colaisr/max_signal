@@ -96,7 +96,8 @@ async def create_run(
         instrument = Instrument(
             symbol=request.instrument,
             type=inst_type,
-            exchange=market_data.exchange or "unknown"
+            exchange=market_data.exchange or "unknown",
+            is_enabled=False  # New instruments are disabled by default (admin must enable in Settings)
         )
         db.add(instrument)
         db.commit()

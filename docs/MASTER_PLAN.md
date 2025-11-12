@@ -302,7 +302,7 @@ Constraints and preferences:
 
 - Environment
   - Backend binds to `0.0.0.0:8000`
-  - Frontend binds to `0.0.0.0:3000`, `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000`
+  - Frontend binds to `0.0.0.0:3000`; API base URL is centralized in `frontend/lib/config.ts` and automatically matches the current hostname (e.g., `http://localhost:8000` when visiting `http://localhost:3000`). For local scripts (`start_all.sh`), prefer `http://localhost:3000` consistently.
   - Reverse proxy optional for MVP; can add Nginx/Caddy later for TLS/domains
   - MySQL connection configured in `app/config_local.py` (local dev DB and prod DB endpoints)
 
@@ -319,6 +319,21 @@ Constraints and preferences:
 - Frontend
   - Login page; guard protected pages; show current user and role.
   - Error states and lockouts; logout action.
+
+#### 10b) Local Auth Flow Notes & Troubleshooting (Dev)
+
+- Standard session auth
+  - Backend sets `maxsignal_session` as an HttpOnly cookie with `SameSite=lax`, `Path=/` (set `secure=True` in production over HTTPS).
+  - Frontend checks auth via `GET /api/auth/me` only on protected routes; public routes (`/`, `/login`) do not trigger the check.
+- Single source of API base URL
+  - `frontend/lib/config.ts` exports `API_BASE_URL` which derives from `window.location.hostname` when env is not set. This keeps cookies same‑site in dev (avoids `localhost` vs `127.0.0.1` mismatches).
+  - Actionable rule: when using `scripts/start_all.sh`, open the app at `http://localhost:3000` (backend runs at `http://localhost:8000`). Avoid mixing with `127.0.0.1`.
+- Navigation behavior
+  - `Navigation` skips `useAuth()` on `/` and `/login` to avoid unnecessary requests on public pages.
+- When configs change
+  - Restart the frontend dev server to pick up changes to `API_BASE_URL` or auth hooks.
+- Quick troubleshooting
+  - If reload logs you out: ensure FE page host equals BE request host; verify `/api/auth/login` response includes `Set-Cookie`; confirm cookie appears under the matching host in DevTools; clear cookies for the other host and stick to one (`localhost` recommended with `start_all.sh`); restart the FE dev server.
 
 ### 10) Security and Observability
 

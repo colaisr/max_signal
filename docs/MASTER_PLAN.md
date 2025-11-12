@@ -26,7 +26,7 @@ Constraints and preferences:
   - OpenAI-compatible client pointed at OpenRouter base URL (for easy model switching)
   - Telegram: aiogram (async) or python-telegram-bot (sync)
   - Logging: structlog
-  - Data adapters: CCXT (crypto), yfinance (equities)
+  - Data adapters: CCXT (crypto), yfinance (equities), Tinkoff Invest API (MOEX - Russian stocks/bonds/ETFs)
   - Config module: `app/config_local.py` (gitignored) holding keys for OpenRouter and Telegram
 
 - Frontend
@@ -57,7 +57,7 @@ Constraints and preferences:
   - Data Providers: CCXT, yfinance (others later)
 
 - Data model (MySQL)
-  - `instruments`: id, symbol, type, exchange
+  - `instruments`: id, symbol, type, exchange, figi (Tinkoff FIGI for MOEX instruments), is_enabled (admin toggle for dropdown visibility)
   - `analysis_runs`: id, trigger_type (manual/scheduled), instrument_id, timeframe, status (queued/running/succeeded/failed), created_at, finished_at, cost_est_total
   - `analysis_steps`: id, run_id, step_name (wyckoff/smc/vsa/delta/ict/merge), input_blob, output_blob, llm_model, tokens, cost_est, created_at
 - `telegram_posts`: id, run_id, message_text, status (pending/sent/failed), message_id, sent_at
@@ -134,6 +134,11 @@ Constraints and preferences:
   - **LLM Models**: Available models, routing rules, cost per 1K tokens
   - **Data Sources**: CCXT exchanges, yfinance markets, cache settings
   - **Telegram**: Bot token, channel ID, publishing settings
+  - **Tinkoff Invest API**: API token for MOEX instruments (required for Russian stocks/bonds/ETFs)
+  - **Available Instruments**: Searchable list of all instruments (crypto, equities, MOEX) with enable/disable toggles
+    - Enabled instruments appear in dropdown selectors
+    - Instruments fetched dynamically from APIs (MOEX ISS API for Russian market)
+    - Supports search and scrollable view (shows 10 items at a time)
   - **User Preferences**: Profile, theme, timezone, notifications
   - **System** (admin): Feature flags, cost limits
 
@@ -257,7 +262,14 @@ Constraints and preferences:
 
 - CCXT (crypto): normalized OHLCV, adjustable timeframe, exchange-specific symbol mapping
 - yfinance (equities): OHLCV daily/intraday; handle API limits and caching
+- Tinkoff Invest API (MOEX): Russian stocks, bonds, ETFs from Moscow Exchange
+  - Uses FIGI (Financial Instrument Global Identifier) for instrument identification
+  - FIGI mapping cached in `instruments` table (`figi` column)
+  - Automatic FIGI lookup via Tinkoff API when instrument is first used
+  - Requires Tinkoff API token configured in Settings
+  - Supports timeframes: M1, M5, M15, H1, D1
 - `data_cache` table for short-lived cache to reduce repeated fetches
+- Instrument routing: `DataService` automatically selects adapter based on `exchange` field in `instruments` table
 
 
 ### 7) Scheduling
@@ -418,9 +430,13 @@ Constraints and preferences:
 - Data adapters
   - [x] Crypto OHLCV fetched ✅
   - [x] Equity OHLCV fetched ✅
+  - [x] MOEX OHLCV fetched via Tinkoff API ✅
+  - [x] FIGI mapping and caching implemented ✅
+  - [x] Instrument routing based on exchange field ✅
   - [x] Normalization verified ✅
   - [x] Caching implemented ✅
   - [x] Minimal UI working ✅
+  - [x] Instrument management UI (enable/disable, search) ✅
 
 - Authentication
   - [ ] Login/logout works with session cookie

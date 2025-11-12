@@ -97,6 +97,22 @@ async function updateOpenRouterSettings(api_key: string | null) {
   return data
 }
 
+async function fetchTinkoffSettings() {
+  const { data } = await axios.get(`${API_BASE_URL}/api/settings/tinkoff`, {
+    withCredentials: true
+  })
+  return data
+}
+
+async function updateTinkoffSettings(api_token: string | null) {
+  const { data } = await axios.put(
+    `${API_BASE_URL}/api/settings/tinkoff`,
+    { api_token },
+    { withCredentials: true }
+  )
+  return data
+}
+
 async function fetchAllInstruments() {
   const { data } = await axios.get<Instrument[]>(`${API_BASE_URL}/api/instruments/all`, {
     withCredentials: true
@@ -122,8 +138,11 @@ export default function SettingsPage() {
   const [openRouterKey, setOpenRouterKey] = useState('')
   const [showTelegramToken, setShowTelegramToken] = useState(false)
   const [showOpenRouterKey, setShowOpenRouterKey] = useState(false)
+  const [tinkoffToken, setTinkoffToken] = useState('')
+  const [showTinkoffToken, setShowTinkoffToken] = useState(false)
   const telegramInitialized = useRef(false)
   const openRouterInitialized = useRef(false)
+  const tinkoffInitialized = useRef(false)
   const [instrumentSearch, setInstrumentSearch] = useState('')
   const [instrumentTypeFilter, setInstrumentTypeFilter] = useState<'all' | 'crypto' | 'equity'>('all')
 
@@ -149,6 +168,12 @@ export default function SettingsPage() {
     enabled: !authLoading,
   })
 
+  const { data: tinkoffSettings } = useQuery({
+    queryKey: ['settings', 'tinkoff'],
+    queryFn: fetchTinkoffSettings,
+    enabled: !authLoading,
+  })
+
   const { data: allInstruments = [], isLoading: instrumentsLoading } = useQuery({
     queryKey: ['instruments', 'all'],
     queryFn: fetchAllInstruments,
@@ -171,6 +196,13 @@ export default function SettingsPage() {
       openRouterInitialized.current = true
     }
   }, [openRouterSettings])
+
+  useEffect(() => {
+    if (tinkoffSettings?.api_token && !tinkoffInitialized.current) {
+      setTinkoffToken(tinkoffSettings.api_token)
+      tinkoffInitialized.current = true
+    }
+  }, [tinkoffSettings])
 
   const updateModelMutation = useMutation({
     mutationFn: ({ id, is_enabled }: { id: number; is_enabled: boolean }) =>
@@ -201,6 +233,14 @@ export default function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings', 'openrouter'] })
       alert('OpenRouter settings saved!')
+    },
+  })
+
+  const updateTinkoffMutation = useMutation({
+    mutationFn: () => updateTinkoffSettings(tinkoffToken || null),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'tinkoff'] })
+      alert('Tinkoff settings saved!')
     },
   })
 
@@ -517,13 +557,13 @@ export default function SettingsPage() {
                 Bot Token
               </label>
               <div className="relative">
-                <input
+              <input
                   type={showTelegramToken ? "text" : "password"}
-                  value={telegramBotToken}
-                  onChange={(e) => setTelegramBotToken(e.target.value)}
-                  placeholder="Get from @BotFather"
+                value={telegramBotToken}
+                onChange={(e) => setTelegramBotToken(e.target.value)}
+                placeholder="Get from @BotFather"
                   className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
+              />
                 <button
                   type="button"
                   onClick={() => setShowTelegramToken(!showTelegramToken)}
@@ -560,7 +600,7 @@ export default function SettingsPage() {
         </div>
 
         {/* OpenRouter Settings */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
           <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
             OpenRouter Configuration
           </h2>
@@ -574,13 +614,13 @@ export default function SettingsPage() {
                 API Key
               </label>
               <div className="relative">
-                <input
+              <input
                   type={showOpenRouterKey ? "text" : "password"}
-                  value={openRouterKey}
-                  onChange={(e) => setOpenRouterKey(e.target.value)}
-                  placeholder="Get from https://openrouter.ai"
+                value={openRouterKey}
+                onChange={(e) => setOpenRouterKey(e.target.value)}
+                placeholder="Get from https://openrouter.ai"
                   className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
+              />
                 <button
                   type="button"
                   onClick={() => setShowOpenRouterKey(!showOpenRouterKey)}
@@ -612,6 +652,64 @@ export default function SettingsPage() {
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md font-medium transition-colors"
             >
               {updateOpenRouterMutation.isPending ? 'Saving...' : 'Save OpenRouter Settings'}
+            </button>
+          </div>
+        </div>
+
+        {/* Tinkoff Invest API Settings */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Tinkoff Invest API Configuration
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Configure your Tinkoff Invest API token for MOEX (Moscow Exchange) instruments.
+            Required to fetch data for Russian stocks, bonds, and ETFs.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                API Token
+              </label>
+              <div className="relative">
+                <input
+                  type={showTinkoffToken ? "text" : "password"}
+                  value={tinkoffToken}
+                  onChange={(e) => setTinkoffToken(e.target.value)}
+                  placeholder="Get from Tinkoff Invest account settings"
+                  className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowTinkoffToken(!showTinkoffToken)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
+                  aria-label={showTinkoffToken ? "Hide token" : "Show token"}
+                >
+                  {showTinkoffToken ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.29 3.29m0 0L9.88 9.88m-3.59-3.59L3 3m6.29 6.29L9.88 9.88" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              {tinkoffSettings?.api_token_masked && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Current: {tinkoffSettings.api_token_masked}
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={() => updateTinkoffMutation.mutate()}
+              disabled={updateTinkoffMutation.isPending}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md font-medium transition-colors"
+            >
+              {updateTinkoffMutation.isPending ? 'Saving...' : 'Save Tinkoff Settings'}
             </button>
           </div>
         </div>

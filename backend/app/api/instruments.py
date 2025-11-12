@@ -96,7 +96,8 @@ def _get_all_equity_instruments() -> List[str]:
     """Get comprehensive list of equity instruments.
     
     Note: yfinance doesn't provide a list API, so we use a curated list
-    of popular stocks, ETFs, indices, commodity futures, forex pairs, and key MOEX tickers.
+    of popular stocks, ETFs, indices, and commodity futures.
+    MOEX (.ME) tickers are excluded as they often return no data from yfinance.
     """
     # Popular stocks (S&P 500 top companies + major tech)
     stocks = [

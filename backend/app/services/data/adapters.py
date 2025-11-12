@@ -553,11 +553,11 @@ class DataService:
                     raise ValueError("Tinkoff adapter not initialized. Please configure Tinkoff API token in Settings → Tinkoff Invest API Configuration.")
                 adapter = self.tinkoff_adapter
             elif '/' in instrument.upper() or instrument.upper().endswith('USDT'):
-            # Crypto
-            adapter = self.ccxt_adapter
-        else:
+                # Crypto
+                adapter = self.ccxt_adapter
+            else:
                 # Equity (default to yfinance)
-            adapter = self.yfinance_adapter
+                adapter = self.yfinance_adapter
         finally:
             db.close()
         

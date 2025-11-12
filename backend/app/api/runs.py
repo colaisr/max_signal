@@ -68,7 +68,7 @@ async def create_run(
     # TODO: Check against instruments table
     
     # Fetch market data to validate instrument/timeframe
-    data_service = DataService()
+    data_service = DataService(db=db)
     try:
         market_data = data_service.fetch_market_data(
             instrument=request.instrument,

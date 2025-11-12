@@ -92,3 +92,4 @@ curl http://localhost:8000/api/instruments/all | grep -i "SBER\|MOEX" | head -5
 - Check error messages in deploy output
 - Manually install: `cd backend && source .venv/bin/activate && pip install tinkoff-investments apimoex requests`
 
+

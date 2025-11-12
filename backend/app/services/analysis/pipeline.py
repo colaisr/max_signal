@@ -26,7 +26,7 @@ class AnalysisPipeline:
     """Orchestrates the complete analysis pipeline."""
     
     def __init__(self):
-        self.data_service = DataService()
+        self.data_service = None  # Will be initialized in run() with db session to get Tinkoff token
         self.llm_client = None  # Will be initialized in run() with db session
         self.steps = [
             ("wyckoff", WyckoffAnalyzer()),
@@ -56,6 +56,11 @@ class AnalysisPipeline:
             # Initialize LLM client with db session to read API key from Settings
             if not self.llm_client:
                 self.llm_client = LLMClient(db=db)
+            
+            # Initialize DataService with db session to read Tinkoff token from Settings
+            if not self.data_service:
+                from app.services.data.adapters import DataService
+                self.data_service = DataService(db=db)
             
             # Update status to running
             run.status = RunStatus.RUNNING

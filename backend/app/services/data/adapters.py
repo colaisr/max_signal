@@ -8,9 +8,38 @@ import yfinance as yf
 import pandas as pd
 from app.core.database import SessionLocal
 from app.models.data_cache import DataCache
+from app.models.instrument import Instrument
+from app.models.settings import AppSettings
 from app.services.data.normalized import MarketData, OHLCVCandle
 import json
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def get_tinkoff_token(db: Optional[SessionLocal] = None) -> Optional[str]:
+    """Get Tinkoff API token from Settings.
+    
+    Args:
+        db: Optional database session. If None, creates a new one.
+        
+    Returns:
+        Tinkoff API token or None if not configured
+    """
+    if db is None:
+        db = SessionLocal()
+        try:
+            return get_tinkoff_token(db)
+        finally:
+            db.close()
+    
+    try:
+        setting = db.query(AppSettings).filter(AppSettings.key == "tinkoff_api_token").first()
+        return setting.value if setting and setting.value else None
+    except Exception as e:
+        logger.warning(f"Error getting Tinkoff token: {e}")
+        return None
 
 
 class DataAdapter:
@@ -184,12 +213,245 @@ class YFinanceAdapter(DataAdapter):
             raise ValueError(f"Failed to fetch data from yfinance: {str(e)}")
 
 
+class TinkoffAdapter(DataAdapter):
+    """Tinkoff Invest API adapter for MOEX instruments."""
+    
+    def __init__(self, api_token: str):
+        """Initialize Tinkoff adapter.
+        
+        Args:
+            api_token: Tinkoff Invest API token
+        """
+        try:
+            from tinkoff.invest import Client
+            from tinkoff.invest import CandleInterval
+            self.Client = Client
+            self.CandleInterval = CandleInterval
+        except ImportError:
+            raise ImportError("tinkoff-investments package not installed. Install with: pip install tinkoff-investments")
+        
+        self.api_token = api_token
+        self.client = None  # Will be created per request (not kept open)
+    
+    def _normalize_timeframe(self, timeframe: str):
+        """Convert our timeframe to Tinkoff CandleInterval."""
+        mapping = {
+            'M1': self.CandleInterval.CANDLE_INTERVAL_1_MIN,
+            'M5': self.CandleInterval.CANDLE_INTERVAL_5_MIN,
+            'M15': self.CandleInterval.CANDLE_INTERVAL_15_MIN,
+            'M30': self.CandleInterval.CANDLE_INTERVAL_15_MIN,  # Tinkoff doesn't have M30, use M15
+            'H1': self.CandleInterval.CANDLE_INTERVAL_HOUR,
+            'D1': self.CandleInterval.CANDLE_INTERVAL_DAY,
+        }
+        return mapping.get(timeframe.upper(), self.CandleInterval.CANDLE_INTERVAL_DAY)
+    
+    def _get_figi_for_ticker(self, ticker: str, db: SessionLocal) -> Optional[str]:
+        """Get FIGI for a ticker from database or Tinkoff API.
+        
+        Args:
+            ticker: Instrument ticker (e.g., 'SBER')
+            db: Database session
+            
+        Returns:
+            FIGI string or None if not found
+        """
+        # Check database first
+        instrument = db.query(Instrument).filter(Instrument.symbol == ticker).first()
+        if instrument and instrument.figi:
+            return instrument.figi
+        
+        # If not in DB, search Tinkoff API
+        try:
+            with self.Client(self.api_token) as client:
+                from tinkoff.invest.schemas import InstrumentIdType
+                
+                # Search for instrument
+                search_result = client.instruments.find_instrument(query=ticker)
+                
+                if not search_result.instruments:
+                    logger.warning(f"No instruments found for ticker: {ticker}")
+                    return None
+                
+                # Find MOEX share with matching ticker
+                # Prefer BBG FIGI (Bloomberg) over TCS (Tinkoff internal)
+                found_shares = []
+                for inst in search_result.instruments:
+                    if inst.instrument_type == "share" and inst.ticker == ticker:
+                        found_shares.append(inst)
+                
+                # Sort: prefer BBG FIGI
+                found_shares.sort(key=lambda x: (not x.figi.startswith("BBG"), x.figi))
+                
+                for inst in found_shares:
+                    # Verify it's MOEX by getting full details
+                    try:
+                        full_inst = client.instruments.share_by(
+                            id_type=InstrumentIdType.INSTRUMENT_ID_TYPE_FIGI,
+                            id=inst.figi
+                        )
+                        if full_inst.instrument.exchange == "MOEX":
+                            figi = inst.figi
+                            # Cache FIGI in database
+                            if instrument:
+                                instrument.figi = figi
+                                instrument.exchange = "MOEX"  # Ensure exchange is set
+                                db.commit()
+                            else:
+                                # Create instrument record if it doesn't exist
+                                instrument = Instrument(
+                                    symbol=ticker,
+                                    type="equity",
+                                    exchange="MOEX",
+                                    figi=figi,
+                                    is_enabled=False
+                                )
+                                db.add(instrument)
+                                db.commit()
+                            
+                            logger.info(f"Cached FIGI {figi} for ticker {ticker}")
+                            return figi
+                    except Exception as e:
+                        logger.warning(f"Could not verify exchange for {ticker} (FIGI: {inst.figi}): {e}")
+                        continue
+                
+                # If we found shares but couldn't verify, try using first one anyway (might be MOEX)
+                if found_shares:
+                    logger.warning(f"Could not verify MOEX exchange for {ticker}, but found shares. Using first: {found_shares[0].figi}")
+                    figi = found_shares[0].figi
+                    if instrument:
+                        instrument.figi = figi
+                        instrument.exchange = "MOEX"
+                        db.commit()
+                    else:
+                        instrument = Instrument(
+                            symbol=ticker,
+                            type="equity",
+                            exchange="MOEX",
+                            figi=figi,
+                            is_enabled=False
+                        )
+                        db.add(instrument)
+                        db.commit()
+                    return figi
+                
+                logger.warning(f"Could not find MOEX share for ticker: {ticker}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to get FIGI for {ticker}: {e}")
+            return None
+    
+    def fetch_ohlcv(
+        self,
+        instrument: str,
+        timeframe: str,
+        limit: int = 500,
+        since: Optional[datetime] = None
+    ) -> MarketData:
+        """Fetch OHLCV data from Tinkoff API.
+        
+        Args:
+            instrument: Ticker symbol (e.g., 'SBER', 'GAZP')
+            timeframe: Timeframe (M1, M5, M15, H1, D1)
+            limit: Maximum number of candles
+            since: Start datetime (optional)
+        """
+        db = SessionLocal()
+        try:
+            # Get FIGI for ticker
+            figi = self._get_figi_for_ticker(instrument, db)
+            if not figi:
+                raise ValueError(f"Could not find FIGI for instrument: {instrument}")
+            
+            # Calculate date range
+            to_date = datetime.now(timezone.utc)
+            if since:
+                from_date = since
+            else:
+                # Default: fetch last N days based on timeframe
+                days_map = {
+                    'M1': 1,   # 1 day for 1-minute candles
+                    'M5': 1,   # 1 day for 5-minute candles
+                    'M15': 3,  # 3 days for 15-minute candles
+                    'H1': 7,   # 7 days for hourly candles
+                    'D1': 365, # 1 year for daily candles
+                }
+                days = days_map.get(timeframe.upper(), 30)
+                from_date = to_date - timedelta(days=days)
+            
+            # Get candle interval
+            candle_interval = self._normalize_timeframe(timeframe)
+            
+            # Fetch candles from Tinkoff
+            with self.Client(self.api_token) as client:
+                candles_response = client.market_data.get_candles(
+                    figi=figi,
+                    from_=from_date,
+                    to=to_date,
+                    interval=candle_interval
+                )
+                
+                if not candles_response.candles:
+                    raise ValueError(f"No candles returned for {instrument} (FIGI: {figi})")
+                
+                # Convert to normalized format
+                candles = []
+                for candle in candles_response.candles[-limit:]:  # Take last N candles
+                    # Tinkoff uses units.nano format for prices
+                    def convert_price(price_obj):
+                        if hasattr(price_obj, 'units') and hasattr(price_obj, 'nano'):
+                            return float(price_obj.units) + float(price_obj.nano) / 1e9
+                        return float(price_obj)
+                    
+                    candles.append(OHLCVCandle(
+                        timestamp=candle.time.replace(tzinfo=timezone.utc) if candle.time.tzinfo is None else candle.time,
+                        open=convert_price(candle.open),
+                        high=convert_price(candle.high),
+                        low=convert_price(candle.low),
+                        close=convert_price(candle.close),
+                        volume=candle.volume
+                    ))
+                
+                return MarketData(
+                    instrument=instrument,
+                    timeframe=timeframe,
+                    exchange="MOEX",
+                    candles=candles,
+                    fetched_at=datetime.now(timezone.utc)
+                )
+                
+        except Exception as e:
+            raise ValueError(f"Failed to fetch data from Tinkoff: {str(e)}")
+        finally:
+            db.close()
+
+
 class DataService:
     """Service for fetching and caching market data."""
     
-    def __init__(self):
+    def __init__(self, tinkoff_token: Optional[str] = None, db: Optional[SessionLocal] = None):
+        """Initialize data service with adapters.
+        
+        Args:
+            tinkoff_token: Optional Tinkoff API token for MOEX instruments (if None, tries to load from Settings)
+            db: Optional database session for loading token from Settings
+        """
         self.ccxt_adapter = CCXTAdapter()
         self.yfinance_adapter = YFinanceAdapter()
+        
+        # Get Tinkoff token if not provided
+        if tinkoff_token is None:
+            tinkoff_token = get_tinkoff_token(db)
+        
+        # Initialize Tinkoff adapter if token available
+        if tinkoff_token:
+            try:
+                self.tinkoff_adapter = TinkoffAdapter(tinkoff_token)
+            except Exception as e:
+                logger.warning(f"Could not initialize Tinkoff adapter: {e}")
+                self.tinkoff_adapter = None
+        else:
+            self.tinkoff_adapter = None
     
     def _get_cache_key(self, instrument: str, timeframe: str) -> str:
         """Generate cache key."""
@@ -266,7 +528,7 @@ class DataService:
         """Fetch market data with caching support.
         
         Args:
-            instrument: Symbol (e.g., 'BTC/USDT', 'AAPL')
+            instrument: Symbol (e.g., 'BTC/USDT', 'AAPL', 'SBER')
             timeframe: Timeframe (M1, M5, M15, H1, D1, etc.)
             use_cache: Whether to use cache
             cache_ttl: Cache TTL in seconds (default 5 minutes)
@@ -279,13 +541,25 @@ class DataService:
             if cached:
                 return cached
         
-        # Determine adapter based on instrument type
-        if '/' in instrument.upper() or instrument.upper().endswith('USDT'):
+        # Check database to determine adapter based on exchange field
+        db = SessionLocal()
+        try:
+            from app.models.instrument import Instrument
+            db_instrument = db.query(Instrument).filter(Instrument.symbol == instrument).first()
+            
+            if db_instrument and db_instrument.exchange == "MOEX":
+                # MOEX instrument - use Tinkoff adapter
+                if not hasattr(self, 'tinkoff_adapter') or self.tinkoff_adapter is None:
+                    raise ValueError("Tinkoff adapter not initialized. Please configure Tinkoff API token in Settings → Tinkoff Invest API Configuration.")
+                adapter = self.tinkoff_adapter
+            elif '/' in instrument.upper() or instrument.upper().endswith('USDT'):
             # Crypto
             adapter = self.ccxt_adapter
         else:
-            # Equity
+                # Equity (default to yfinance)
             adapter = self.yfinance_adapter
+        finally:
+            db.close()
         
         # Fetch data
         data = adapter.fetch_ohlcv(instrument, timeframe, limit=500)

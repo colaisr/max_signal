@@ -58,6 +58,10 @@ class UpdateOpenRouterRequest(BaseModel):
     api_key: Optional[str] = None
 
 
+class UpdateTinkoffRequest(BaseModel):
+    api_token: Optional[str] = None
+
+
 # Models endpoints
 @router.get("/models", response_model=List[ModelResponse])
 async def list_models(
@@ -190,6 +194,38 @@ async def update_openrouter_settings(
         db.commit()
     
     return {"success": True, "message": "OpenRouter settings updated"}
+
+
+@router.get("/tinkoff")
+async def get_tinkoff_settings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user_dependency)
+):
+    """Get Tinkoff Invest API settings (admin only)."""
+    api_token = db.query(AppSettings).filter(AppSettings.key == "tinkoff_api_token").first()
+    
+    return {
+        "api_token": api_token.value if api_token else None,
+        "api_token_masked": mask_secret(api_token.value) if api_token and api_token.value else None,
+    }
+
+
+@router.put("/tinkoff")
+async def update_tinkoff_settings(
+    request: UpdateTinkoffRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user_dependency)
+):
+    """Update Tinkoff Invest API settings (admin only)."""
+    if request.api_token is not None:
+        setting = db.query(AppSettings).filter(AppSettings.key == "tinkoff_api_token").first()
+        if not setting:
+            setting = AppSettings(key="tinkoff_api_token", is_secret=True, description="Tinkoff Invest API token for MOEX instruments")
+            db.add(setting)
+        setting.value = request.api_token
+        db.commit()
+    
+    return {"success": True, "message": "Tinkoff settings updated"}
 
 
 def mask_secret(value: str, visible_chars: int = 4) -> str:

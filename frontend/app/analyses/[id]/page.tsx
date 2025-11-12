@@ -23,6 +23,12 @@ interface DataSource {
   is_enabled: boolean
 }
 
+interface Instrument {
+  symbol: string
+  type: string
+  exchange: string | null
+}
+
 interface StepConfig {
   step_name: string
   step_type: string
@@ -59,6 +65,11 @@ async function fetchEnabledModels() {
 
 async function fetchEnabledDataSources() {
   const { data } = await axios.get<DataSource[]>(`${API_BASE_URL}/api/settings/data-sources?enabled_only=true`)
+  return data
+}
+
+async function fetchInstruments() {
+  const { data } = await axios.get<Instrument[]>(`${API_BASE_URL}/api/instruments`)
   return data
 }
 
@@ -109,6 +120,11 @@ export default function AnalysisDetailPage() {
   const { data: enabledDataSources = [] } = useQuery({
     queryKey: ['settings', 'data-sources', 'enabled'],
     queryFn: fetchEnabledDataSources,
+  })
+
+  const { data: instruments = [], isLoading: instrumentsLoading, error: instrumentsError } = useQuery({
+    queryKey: ['instruments'],
+    queryFn: fetchInstruments,
   })
 
   const createRunMutation = useMutation({
@@ -485,13 +501,28 @@ export default function AnalysisDetailPage() {
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                 Instrument
               </label>
-              <input
-                type="text"
+              <select
                 value={selectedInstrument}
                 onChange={(e) => setSelectedInstrument(e.target.value)}
-                placeholder={analysis.config.default_instrument}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
+                disabled={instrumentsLoading}
+              >
+                <option value="">Select instrument...</option>
+                {instrumentsLoading ? (
+                  <option disabled>Loading instruments...</option>
+                ) : (
+                  instruments.map((inst) => (
+                    <option key={inst.symbol} value={inst.symbol}>
+                      {inst.symbol} ({inst.type})
+                    </option>
+                  ))
+                )}
+              </select>
+              {instrumentsError && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                  Failed to load instruments
+                </p>
+              )}
             </div>
 
             <div>

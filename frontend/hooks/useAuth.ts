@@ -1,11 +1,13 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
-import { useRouter } from 'next/navigation'
+import apiClient from '@/lib/api'
+import { API_BASE_URL } from '@/lib/config'
+import { useRouter, usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+// Public routes where we don't check auth
+const PUBLIC_ROUTES = ['/', '/login']
 
 interface User {
   id: number
@@ -15,56 +17,63 @@ interface User {
   created_at: string
 }
 
-async function getCurrentUser() {
+// Simple function to get current user - just make the request
+async function getCurrentUser(): Promise<User | null> {
   try {
-    const { data } = await axios.get<User>(`${API_BASE_URL}/api/auth/me`, {
-      withCredentials: true
+    const response = await apiClient.get<User>(`${API_BASE_URL}/api/auth/me`, {
+      withCredentials: true,
+      validateStatus: (status) => status === 200 || status === 401, // Don't throw on 401
     })
-    return data
-  } catch (error: any) {
-    // If 401, user is not authenticated - this is expected
-    if (error.response?.status === 401) {
-      return null
+    
+    if (response.status === 401) {
+      return null // Not authenticated
     }
-    throw error
+    
+    return response.data
+  } catch {
+    return null
   }
 }
 
 async function logout() {
-  await axios.post(`${API_BASE_URL}/api/auth/logout`, {}, {
+  await apiClient.post(`${API_BASE_URL}/api/auth/logout`, {}, {
     withCredentials: true
   })
 }
 
 export function useAuth() {
   const router = useRouter()
+  const pathname = usePathname()
   const queryClient = useQueryClient()
+  
+  // Only check auth on protected routes
+  // Wait for pathname to be available before deciding
+  const isPublicRoute = pathname ? PUBLIC_ROUTES.includes(pathname) : false
+  const shouldCheckAuth = pathname !== null && !isPublicRoute
 
-  const { data: user, isLoading, error } = useQuery({
+  const { data: user, isLoading } = useQuery({
     queryKey: ['auth', 'me'],
     queryFn: getCurrentUser,
+    enabled: shouldCheckAuth, // Only run when pathname is known and route is protected
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    refetchOnMount: true, // Always refetch on mount (important for page reload)
   })
 
   const logoutMutation = useMutation({
     mutationFn: logout,
     onSuccess: () => {
-      queryClient.clear()
+      queryClient.setQueryData(['auth', 'me'], null)
       router.push('/login')
     },
   })
 
-  const isAuthenticated = !!user && !error
-  const isAdmin = user?.is_admin || false
-
   return {
-    user,
+    user: user || null,
     isLoading,
-    isAuthenticated,
-    isAdmin,
+    isAuthenticated: !!user,
+    isAdmin: user?.is_admin || false,
     logout: () => logoutMutation.mutate(),
   }
 }
@@ -74,6 +83,8 @@ export function useRequireAuth() {
   const router = useRouter()
 
   useEffect(() => {
+    // Only redirect if we're done loading and not authenticated
+    // This prevents redirect during the initial auth check on page reload
     if (!isLoading && !isAuthenticated) {
       router.push('/login')
     }
@@ -81,4 +92,3 @@ export function useRequireAuth() {
 
   return { isAuthenticated, isLoading }
 }
-

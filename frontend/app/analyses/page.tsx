@@ -4,8 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+import { API_BASE_URL } from '@/lib/config'
 
 interface AnalysisType {
   id: number

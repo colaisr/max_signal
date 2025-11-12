@@ -11,9 +11,9 @@
 - **AI approach**: Heavy usage of LLM agents/tools; LLM provider switchable via OpenAI-compatible API using OpenRouter for simplicity and cost/uptime benefits (`https://openrouter.ai/`).
 
 Constraints and preferences:
-- Separate backend and frontend repositories (work in parallel and commit separately).
+- Monorepo structure (backend and frontend in same repository).
 - Configuration values live in code with a local, non-committed file for secrets (avoid .env in VCS).
-- Single VM deployment without Docker; simple “pull → install deps → restart” flow.
+- Single VM deployment without Docker; simple "pull → install deps → restart" flow.
 
 
 ### 2) Tech Stack
@@ -35,10 +35,10 @@ Constraints and preferences:
   - Pages: Dashboard (trigger run), Run detail (intrasteps), Settings
 
 - Deployment (single VM, no Docker)
-  - Two repos checked out to `/srv/max-signal/backend` and `/srv/max-signal/frontend`
+  - Monorepo checked out to `/srv/max-signal/` (contains `backend/` and `frontend/` subdirectories)
   - Backend: Python venv, Uvicorn via systemd; connects to local or external MySQL
   - Frontend: Next.js production build, `npm run start` via systemd
-  - Scripts: `deploy_backend.sh` and `deploy_frontend.sh`
+  - Scripts: `deploy.sh` (pulls repo), `restart_backend.sh`, `restart_frontend.sh`
   - Local MySQL defaults (dev): host `localhost`, port `3306`, db `max_signal_dev`, user `max_signal_user`
     - SQLAlchemy DSN: `mysql+pymysql://max_signal_user:YOUR_PASSWORD@localhost:3306/max_signal_dev?charset=utf8mb4`
     - Use script: `/Users/colakamornik/Desktop/max_signal_bot/scripts/mysql_local_setup.sql` (edit password, then apply with a privileged MySQL user)
@@ -278,17 +278,27 @@ Constraints and preferences:
 ### 9) Deployment (Single VM, no Docker)
 
 - Directory layout
-  - `/srv/max-signal/backend` (git repo, Python venv at `.venv/`)
-  - `/srv/max-signal/frontend` (git repo)
-  - `/srv/max-signal/deploy_backend.sh`, `/srv/max-signal/deploy_frontend.sh`
+  - `/srv/max-signal/` (monorepo git repo)
+    - `backend/` (Python venv at `backend/.venv/`)
+    - `frontend/`
+    - `scripts/` (deployment scripts)
+  - `/srv/max-signal/scripts/deploy.sh` (pulls entire repo)
+  - `/srv/max-signal/scripts/restart_backend.sh` (updates backend deps, migrations, restarts)
+  - `/srv/max-signal/scripts/restart_frontend.sh` (updates frontend deps, builds, restarts)
 
 - Systemd units
   - `max-signal-backend.service`: runs Uvicorn with 2 workers, working dir `/srv/max-signal/backend`
   - `max-signal-frontend.service`: runs `npm run start -- --port 3000` in `/srv/max-signal/frontend`
 
 - Deploy scripts (manual run after push)
-  - Backend: pull/reset to `origin/main`, create venv, `pip install -r requirements.txt`, run Alembic migrations, `systemctl restart max-signal-backend`
-  - Frontend: pull/reset to `origin/main`, `npm ci`, `npm run build`, `systemctl restart max-signal-frontend`
+  - Step 1: `./scripts/deploy.sh` - Complete deployment preparation:
+    - Pulls latest changes from `origin/main` (or current branch)
+    - Updates backend dependencies (`requirements.txt`)
+    - Runs database migrations (`alembic upgrade head`)
+    - Updates frontend dependencies (`package.json`)
+    - Builds frontend for production (`npm run build`)
+  - Step 2: `./scripts/restart_backend.sh` - Restarts backend service (syncs deps/migrations if needed)
+  - Step 3: `./scripts/restart_frontend.sh` - Restarts frontend service (rebuilds if needed)
 
 - Environment
   - Backend binds to `0.0.0.0:8000`
@@ -425,8 +435,11 @@ Constraints and preferences:
   - [ ] Run completes without manual action
 
 - Deployment
-  - [ ] deploy scripts idempotent
-  - [ ] systemd services restart and stay active
+  - [x] deploy scripts created ✅
+  - [x] systemd service files created ✅
+  - [x] deployment documentation written ✅
+  - [ ] deploy scripts tested in production
+  - [ ] systemd services tested and verified
 
 - Backtesting (Phase 2)
   - [ ] Historical batch runs complete
@@ -460,7 +473,7 @@ Constraints and preferences:
 - [x] Telegram Integration ✅ (Completed: Backend publish endpoint, message splitting, Settings page, credentials from AppSettings, TelegramUser model, bot handler for /start/help/status commands, automatic user registration, direct messaging to users, error handling for partial failures)
 - [ ] Refactor pipeline to use analysis_type configuration (accepts custom_config, needs full implementation)
 - [ ] Scheduling
-- [ ] Deployment (single VM)
+- [x] Deployment (single VM) ✅ (Scripts and documentation ready - see `docs/PRODUCTION_DEPLOYMENT.md`)
 - [ ] Backtesting (Phase 2)
 
 

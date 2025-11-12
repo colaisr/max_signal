@@ -2,9 +2,9 @@
 
 Market analysis and trading signal generation system with AI-powered analysis.
 
-## Repositories
+## Repository Structure
 
-This project consists of two separate repositories:
+This is a monorepo containing both backend and frontend:
 
 - **Backend** (`backend/`): FastAPI application with MySQL, Alembic migrations, and analysis pipeline
 - **Frontend** (`frontend/`): Next.js application with TailwindCSS

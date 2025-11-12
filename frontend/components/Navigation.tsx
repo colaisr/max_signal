@@ -14,12 +14,14 @@ const navigation = [
 
 export default function Navigation() {
   const pathname = usePathname()
-  const { user, logout, isAuthenticated } = useAuth()
 
   // Don't show nav on login page or landing page
   if (pathname === '/login' || pathname === '/') {
     return null
   }
+
+  // Only load auth state when navigation is visible
+  const { user, logout, isAuthenticated } = useAuth()
 
   return (
     <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">

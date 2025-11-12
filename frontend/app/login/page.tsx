@@ -2,29 +2,31 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useMutation } from '@tanstack/react-query'
-import axios from 'axios'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import apiClient from '@/lib/api'
+import { API_BASE_URL } from '@/lib/config'
 
 export default function LoginPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { email: string; password: string }) => {
-      const { data } = await axios.post(
+      const { data } = await apiClient.post(
         `${API_BASE_URL}/api/auth/login`,
         credentials,
-        { withCredentials: true } // Important for cookies
+        { withCredentials: true }
       )
       return data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Set user data in cache (cookie is already set by backend)
+      queryClient.setQueryData(['auth', 'me'], data.user)
+      // Redirect to dashboard
       router.push('/dashboard')
-      router.refresh()
     },
     onError: (err: any) => {
       setError(err.response?.data?.detail || 'Login failed')
@@ -101,4 +103,3 @@ export default function LoginPage() {
     </div>
   )
 }
-

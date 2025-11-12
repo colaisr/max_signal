@@ -87,6 +87,7 @@ async def login(
         secure=False,  # Set to True in production with HTTPS
         samesite="lax",
         max_age=86400,  # 24 hours
+        path="/",  # Ensure cookie is available for all paths
     )
     
     return {

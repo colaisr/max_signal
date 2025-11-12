@@ -13,7 +13,7 @@ app_settings = get_settings()
 app = FastAPI(
     title="Max Signal Bot API",
     description="Market analysis and trading signal generation API",
-    version="0.1.1",  # Updated for deployment test
+    version="0.1.2",  # Deployment test v2
 )
 
 # CORS middleware (adjust origins for production)

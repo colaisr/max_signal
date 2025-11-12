@@ -56,6 +56,47 @@ source .venv/bin/activate
 # Update dependencies
 echo "   Installing/updating Python packages from requirements.txt..."
 pip install -r requirements.txt --quiet --upgrade
+
+# Verify critical packages are installed
+echo "   Verifying critical packages..."
+# Map package names to their import names
+declare -A PACKAGE_IMPORTS=(
+    ["tinkoff-investments"]="tinkoff.invest"
+    ["apimoex"]="apimoex"
+    ["requests"]="requests"
+    ["ccxt"]="ccxt"
+    ["yfinance"]="yfinance"
+)
+
+MISSING_PACKAGES=()
+for pkg_name in "${!PACKAGE_IMPORTS[@]}"; do
+    import_name="${PACKAGE_IMPORTS[$pkg_name]}"
+    if ! python -c "import ${import_name}" 2>/dev/null; then
+        MISSING_PACKAGES+=("$pkg_name")
+    fi
+done
+
+if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
+    echo -e "${YELLOW}⚠️  Missing packages detected: ${MISSING_PACKAGES[*]}${NC}"
+    echo "   Attempting to reinstall..."
+    pip install -r requirements.txt --upgrade
+    # Check again
+    FAILED_PACKAGES=()
+    for pkg_name in "${MISSING_PACKAGES[@]}"; do
+        import_name="${PACKAGE_IMPORTS[$pkg_name]}"
+        if ! python -c "import ${import_name}" 2>/dev/null; then
+            FAILED_PACKAGES+=("$pkg_name")
+        fi
+    done
+    if [ ${#FAILED_PACKAGES[@]} -gt 0 ]; then
+        echo -e "${RED}❌ Failed to install: ${FAILED_PACKAGES[*]}${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ All packages verified after reinstall${NC}"
+else
+    echo -e "${GREEN}✅ All critical packages verified${NC}"
+fi
+
 echo -e "${GREEN}✅ Backend dependencies updated${NC}"
 echo ""
 

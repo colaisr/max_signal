@@ -38,7 +38,7 @@ export default function LandingPage() {
             <span className="text-gray-900 dark:text-white">al bot</span>
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-            AI-Powered Market Analysis Platform
+            AI-Powered Market Analysis Platform v0.1.1
           </p>
         </div>
 

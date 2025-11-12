@@ -13,13 +13,13 @@ app_settings = get_settings()
 app = FastAPI(
     title="Max Signal Bot API",
     description="Market analysis and trading signal generation API",
-    version="0.1.0",
+    version="0.1.1",  # Updated for deployment test
 )
 
 # CORS middleware (adjust origins for production)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend dev server
+    allow_origins=["http://localhost:3000", "http://45.144.177.203:3000"],  # Frontend dev server + production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

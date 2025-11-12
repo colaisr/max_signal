@@ -92,12 +92,41 @@ def _get_all_crypto_instruments() -> List[str]:
         return []
 
 
+def _get_all_moex_instruments() -> List[str]:
+    """Get all available MOEX instruments from MOEX ISS API.
+    
+    Returns list of tickers (e.g., ['SBER', 'GAZP', 'ROSN']).
+    Uses MOEX ISS API which is free and public.
+    """
+    try:
+        import requests
+        import apimoex
+        
+        with requests.Session() as session:
+            # Get securities from main trading board (TQBR - T+2 stocks)
+            data = apimoex.get_board_securities(session, board='TQBR')
+            
+            # Extract tickers
+            tickers = sorted(set(sec.get('SECID') for sec in data if sec.get('SECID')))
+            
+            logger.info(f"Fetched {len(tickers)} MOEX instruments from ISS API")
+            return tickers
+            
+    except ImportError:
+        logger.warning("apimoex package not installed. MOEX instruments will not be available.")
+        logger.warning("Install with: pip install apimoex")
+        return []
+    except Exception as e:
+        logger.error(f"Failed to fetch MOEX instruments from ISS API: {e}")
+        return []
+
+
 def _get_all_equity_instruments() -> List[str]:
     """Get comprehensive list of equity instruments.
     
     Note: yfinance doesn't provide a list API, so we use a curated list
     of popular stocks, ETFs, indices, and commodity futures.
-    MOEX (.ME) tickers are excluded as they often return no data from yfinance.
+    MOEX instruments are fetched separately from MOEX ISS API.
     """
     # Popular stocks (S&P 500 top companies + major tech)
     stocks = [
@@ -172,7 +201,8 @@ async def list_all_instruments(db: Session = Depends(get_db)):
     This endpoint is used in the Settings page to manage which instruments
     appear in dropdowns. It includes:
     - All crypto pairs from CCXT (Binance USDT pairs)
-    - Comprehensive list of equities (stocks, ETFs, indices)
+    - Comprehensive list of equities (stocks, ETFs, indices, commodity futures)
+    - All MOEX instruments from MOEX ISS API (dynamically fetched)
     - Current enabled status from database
     """
     # Get all instruments from database
@@ -194,7 +224,7 @@ async def list_all_instruments(db: Session = Depends(get_db)):
             id=db_inst.id if db_inst else None
         ))
     
-    # Add equity instruments
+    # Add equity instruments (US stocks, ETFs, commodity futures)
     equity_symbols = _get_all_equity_instruments()
     for symbol in equity_symbols:
         db_inst = db_instruments_map.get(symbol)
@@ -207,8 +237,21 @@ async def list_all_instruments(db: Session = Depends(get_db)):
             id=db_inst.id if db_inst else None
         ))
     
-    # Sort by type, then symbol
-    result.sort(key=lambda x: (x.type, x.symbol))
+    # Add MOEX instruments (dynamically fetched from MOEX ISS API)
+    moex_symbols = _get_all_moex_instruments()
+    for symbol in moex_symbols:
+        db_inst = db_instruments_map.get(symbol)
+        result.append(InstrumentWithStatusResponse(
+            symbol=symbol,
+            type="equity",  # MOEX stocks are also equities
+            exchange="MOEX",
+            display_name=_get_display_name(symbol, "equity", "MOEX"),
+            is_enabled=db_inst.is_enabled if db_inst else False,  # Default to disabled (admin must enable)
+            id=db_inst.id if db_inst else None
+        ))
+    
+    # Sort by type, then exchange, then symbol
+    result.sort(key=lambda x: (x.type, x.exchange or "", x.symbol))
     
     return result
 
@@ -228,8 +271,19 @@ async def toggle_instrument(request: ToggleInstrumentRequest, db: Session = Depe
     
     if not instrument:
         # Determine type and exchange
-        inst_type = "crypto" if "/" in symbol.upper() else "equity"
-        exchange = "binance" if inst_type == "crypto" else None
+        # Check if it's a MOEX instrument (from MOEX ISS API list)
+        moex_symbols = _get_all_moex_instruments()
+        is_moex = symbol in moex_symbols
+        
+        if is_moex:
+            inst_type = "equity"
+            exchange = "MOEX"
+        elif "/" in symbol.upper() or symbol.upper().endswith('USDT'):
+            inst_type = "crypto"
+            exchange = "binance"
+        else:
+            inst_type = "equity"
+            exchange = None  # Will be determined when data is fetched
         
         # Create new instrument - if user is toggling, they want it enabled
         instrument = Instrument(

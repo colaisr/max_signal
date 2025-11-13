@@ -45,9 +45,23 @@ echo ""
 # Check for CSS file issues
 echo -e "${BLUE}🎨 Checking Frontend Static Assets...${NC}"
 FRONTEND_HTML=$(curl -s "${FRONTEND_URL}" || echo "")
-if echo "$FRONTEND_HTML" | grep -q "next/static/css"; then
+if echo "$FRONTEND_HTML" | grep -q "next/static/css" && ! echo "$FRONTEND_HTML" | grep -q "_next/static/css"; then
     echo -e "${YELLOW}⚠️  Found potential CSS path issue (next/static vs _next/static)${NC}"
     echo "   This suggests the frontend build may be outdated"
+elif echo "$FRONTEND_HTML" | grep -q "_next/static/css"; then
+    echo -e "${GREEN}✅ CSS paths look correct (_next/static/css)${NC}"
+    # Try to verify a CSS file loads
+    CSS_FILE=$(echo "$FRONTEND_HTML" | grep -o "_next/static/css/[^\"]*\.css" | head -1)
+    if [ -n "$CSS_FILE" ]; then
+        CSS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${FRONTEND_URL}${CSS_FILE}" 2>/dev/null || echo "000")
+        if [ "$CSS_STATUS" = "200" ]; then
+            echo -e "${GREEN}✅ CSS file loads successfully (HTTP 200)${NC}"
+        else
+            echo -e "${YELLOW}⚠️  CSS file returned HTTP $CSS_STATUS${NC}"
+        fi
+    fi
+else
+    echo -e "${YELLOW}⚠️  Could not verify CSS paths${NC}"
 fi
 echo ""
 

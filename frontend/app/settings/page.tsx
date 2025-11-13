@@ -113,6 +113,15 @@ async function updateTinkoffSettings(api_token: string | null) {
   return data
 }
 
+async function syncModelsFromOpenRouter() {
+  const { data } = await axios.post(
+    `${API_BASE_URL}/api/settings/models/sync`,
+    {},
+    { withCredentials: true }
+  )
+  return data
+}
+
 async function fetchAllInstruments() {
   const { data } = await axios.get<Instrument[]>(`${API_BASE_URL}/api/instruments/all`, {
     withCredentials: true
@@ -145,6 +154,10 @@ export default function SettingsPage() {
   const tinkoffInitialized = useRef(false)
   const [instrumentSearch, setInstrumentSearch] = useState('')
   const [instrumentTypeFilter, setInstrumentTypeFilter] = useState<'all' | 'crypto' | 'equity'>('all')
+  const [modelSearch, setModelSearch] = useState('')
+  const [modelProviderFilter, setModelProviderFilter] = useState<'all' | string>('all')
+  const [showFreeModelsOnly, setShowFreeModelsOnly] = useState(false)
+  const [showEnabledOnly, setShowEnabledOnly] = useState(false)
 
   const { data: models = [], isLoading: modelsLoading } = useQuery({
     queryKey: ['settings', 'models'],
@@ -266,6 +279,19 @@ export default function SettingsPage() {
     },
   })
 
+  const syncModelsMutation = useMutation({
+    mutationFn: syncModelsFromOpenRouter,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'models'] })
+      alert(`Success! ${data.added} new models added, ${data.skipped} already existed.`)
+    },
+    onError: (error: any) => {
+      console.error('Failed to sync models:', error)
+      const errorMsg = error.response?.data?.detail || error.message || 'Failed to sync models'
+      alert(`Failed to sync models: ${errorMsg}`)
+    },
+  })
+
   // Filter instruments based on search and type
   const filteredInstruments = allInstruments.filter((inst) => {
     const matchesSearch = inst.symbol.toLowerCase().includes(instrumentSearch.toLowerCase()) ||
@@ -273,6 +299,22 @@ export default function SettingsPage() {
     const matchesType = instrumentTypeFilter === 'all' || inst.type === instrumentTypeFilter
     return matchesSearch && matchesType
   })
+
+  // Filter models based on search, provider, free filter, and enabled filter
+  const filteredModels = models.filter((model) => {
+    const matchesSearch = model.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+                         model.display_name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+                         (model.description && model.description.toLowerCase().includes(modelSearch.toLowerCase()))
+    const matchesProvider = modelProviderFilter === 'all' || model.provider === modelProviderFilter
+    const matchesFreeFilter = !showFreeModelsOnly || model.name.toLowerCase().includes(':free') || 
+                              model.name.toLowerCase().includes('free') ||
+                              model.display_name.toLowerCase().includes('free')
+    const matchesEnabledFilter = !showEnabledOnly || model.is_enabled
+    return matchesSearch && matchesProvider && matchesFreeFilter && matchesEnabledFilter
+  })
+
+  // Get unique providers for filter dropdown
+  const uniqueProviders = Array.from(new Set(models.map(m => m.provider))).sort()
 
   if (authLoading) {
     return (
@@ -307,63 +349,141 @@ export default function SettingsPage() {
 
         {/* Available Models Section */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Available Models
-          </h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Enable or disable LLM models. Only enabled models will appear in analysis configuration dropdowns.
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                Available Models
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Enable or disable LLM models. Only enabled models will appear in analysis configuration dropdowns.
+                {filteredModels.length > 0 && (
+                  <span className="ml-2 font-medium text-blue-600 dark:text-blue-400">
+                    {filteredModels.length} model{filteredModels.length !== 1 ? 's' : ''} found
+                  </span>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={() => syncModelsMutation.mutate()}
+              disabled={syncModelsMutation.isPending}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {syncModelsMutation.isPending ? 'Syncing...' : 'Sync from OpenRouter'}
+            </button>
+          </div>
 
           {modelsLoading ? (
             <p className="text-gray-600 dark:text-gray-400">Loading models...</p>
           ) : (
             <div className="space-y-4">
-              {models.map((model) => (
-                <div
-                  key={model.id}
-                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+              {/* Search and Filter Controls */}
+              <div className="flex gap-4 items-center flex-wrap">
+                <div className="flex-1 min-w-[200px]">
+                  <input
+                    type="text"
+                    placeholder="Search models by name, provider, or description..."
+                    value={modelSearch}
+                    onChange={(e) => setModelSearch(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  />
+                </div>
+                <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={showEnabledOnly}
+                    onChange={(e) => setShowEnabledOnly(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                  <span className="text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                    Enabled only
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={showFreeModelsOnly}
+                    onChange={(e) => setShowFreeModelsOnly(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                  <span className="text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                    Free to use models
+                  </span>
+                </label>
+                <select
+                  value={modelProviderFilter}
+                  onChange={(e) => setModelProviderFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                          {model.display_name}
-                        </h3>
-                        <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
-                          {model.provider}
-                        </span>
-                        <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-blue-600 dark:text-blue-400">
-                          {model.name}
-                        </span>
+                  <option value="all">All Providers</option>
+                  {uniqueProviders.map((provider) => (
+                    <option key={provider} value={provider}>
+                      {provider.charAt(0).toUpperCase() + provider.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Scrollable Model List */}
+              {filteredModels.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  No models found matching your search.
+                </div>
+              ) : (
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg">
+                  {/* Scrollable container - shows ~10 items at a time, scrollable to see more */}
+                  <div 
+                    className="overflow-y-auto"
+                    style={{ maxHeight: '500px' }}
+                  >
+                    {filteredModels.map((model) => (
+                      <div
+                        key={model.id}
+                        className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                {model.display_name}
+                              </h3>
+                              <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
+                                {model.provider}
+                              </span>
+                              <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-blue-600 dark:text-blue-400">
+                                {model.name}
+                              </span>
+                            </div>
+                            {model.description && (
+                              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                {model.description}
+                              </p>
+                            )}
+                            <div className="flex gap-4 text-xs text-gray-500 dark:text-gray-400">
+                              {model.max_tokens && (
+                                <span>Max tokens: {model.max_tokens.toLocaleString()}</span>
+                              )}
+                              {model.cost_per_1k_tokens && (
+                                <span>Cost: {model.cost_per_1k_tokens}/1k tokens</span>
+                              )}
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer ml-4">
+                            <input
+                              type="checkbox"
+                              checked={model.is_enabled}
+                              onChange={(e) =>
+                                updateModelMutation.mutate({ id: model.id, is_enabled: e.target.checked })
+                              }
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
                       </div>
-                      {model.description && (
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                          {model.description}
-                        </p>
-                      )}
-                      <div className="flex gap-4 text-xs text-gray-500 dark:text-gray-400">
-                        {model.max_tokens && (
-                          <span>Max tokens: {model.max_tokens.toLocaleString()}</span>
-                        )}
-                        {model.cost_per_1k_tokens && (
-                          <span>Cost: {model.cost_per_1k_tokens}/1k tokens</span>
-                        )}
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer ml-4">
-                      <input
-                        type="checkbox"
-                        checked={model.is_enabled}
-                        onChange={(e) =>
-                          updateModelMutation.mutate({ id: model.id, is_enabled: e.target.checked })
-                        }
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                    </label>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>

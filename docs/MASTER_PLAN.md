@@ -131,9 +131,20 @@ Constraints and preferences:
 
 **Settings Page (`/settings`):**
 - Tabbed interface:
-  - **LLM Models**: Available models, routing rules, cost per 1K tokens
+  - **LLM Models**: Available models with advanced filtering and syncing capabilities
+    - **Model Syncing**: "Sync from OpenRouter" button fetches latest available models from OpenRouter API
+    - **Search & Filters**: 
+      - Search by model name, provider, or description
+      - Filter by provider (dropdown)
+      - "Enabled only" toggle to show only enabled models
+      - "Free to use models" toggle to filter free models (models with "free" in name)
+    - **Scrollable List**: Models displayed in scrollable container (max height 500px) for easy browsing
+    - Enable/disable toggles for each model
+    - Models show: display name, provider, model ID, description, max tokens, cost per 1K tokens
+    - New models from sync are disabled by default (admin can enable manually)
   - **Data Sources**: CCXT exchanges, yfinance markets, cache settings
-  - **Telegram**: Bot token, channel ID, publishing settings
+  - **Telegram**: Bot token, channel ID, publishing settings, active users count
+  - **OpenRouter Configuration**: API key for OpenRouter (required for LLM calls and model syncing)
   - **Tinkoff Invest API**: API token for MOEX instruments (required for Russian stocks/bonds/ETFs)
   - **Available Instruments**: Searchable list of all instruments (crypto, equities, MOEX) with enable/disable toggles
     - Enabled instruments appear in dropdown selectors
@@ -502,6 +513,7 @@ Constraints and preferences:
 - [x] Authentication ✅ (Completed: Session-based auth, login/logout, route protection, admin user creation)
 - [x] Analysis Configuration Editing ✅ (Completed: Editable models, prompts, data sources before running)
 - [x] Telegram Integration ✅ (Completed: Backend publish endpoint, message splitting, Settings page, credentials from AppSettings, TelegramUser model, bot handler for /start/help/status commands, automatic user registration, direct messaging to users, error handling for partial failures)
+- [x] Settings Page Enhancements ✅ (Completed: Model syncing from OpenRouter API, search and filter functionality for models, scrollable model list, enabled/free filters, provider filter dropdown)
 - [ ] Refactor pipeline to use analysis_type configuration (accepts custom_config, needs full implementation)
 - [ ] Scheduling
 - [x] Deployment (single VM) ✅ (Scripts and documentation ready - see `docs/PRODUCTION_DEPLOYMENT.md`)
@@ -612,6 +624,25 @@ Since we need to test and observe the analysis pipeline, we should build a **min
   - Frontend shows warnings when some users fail to receive messages ✅
   - Backend logs detailed error information for debugging ✅
 - **Testing:** Can publish to Telegram, users automatically registered via /start command ✅
+
+**10. Settings Page Enhancements** ✅ **COMPLETED** (1 day)
+- **Model Management:**
+  - Added "Sync from OpenRouter" button to fetch latest models from OpenRouter API ✅
+  - Backend endpoint `/api/settings/models/sync` fetches models via OpenRouter API ✅
+  - New models added to database (disabled by default) ✅
+  - Existing models preserved (not overwritten) ✅
+- **Advanced Filtering:**
+  - Search by model name, provider, or description ✅
+  - Provider filter dropdown (dynamically populated) ✅
+  - "Enabled only" toggle to filter enabled models ✅
+  - "Free to use models" toggle to filter free models ✅
+- **UI Improvements:**
+  - Scrollable model list container (max height 500px) ✅
+  - Model count display ("X models found") ✅
+  - Empty state message when no models match ✅
+  - Hover effects and consistent styling ✅
+  - Responsive layout with flex-wrap for smaller screens ✅
+- **Testing:** Can sync models from API, filter by provider/enabled/free, search works correctly ✅
 
 **Why This Approach:**
 - ✅ Can test visually instead of just API calls

@@ -4,7 +4,7 @@ Settings API endpoints.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 from app.core.database import get_db
 from app.models.settings import AvailableModel, AvailableDataSource, AppSettings
 from app.core.auth import get_current_admin_user_dependency
@@ -92,6 +92,67 @@ async def update_model(
     db.commit()
     db.refresh(model)
     return model
+
+
+@router.post("/models/sync", response_model=Dict)
+async def sync_models_from_openrouter(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user_dependency)
+):
+    """Sync available models from OpenRouter API (admin only).
+    
+    Fetches the latest list of models from OpenRouter and adds any new ones
+    to the database. Existing models are not updated to preserve custom settings.
+    """
+    try:
+        from app.services.llm.client import fetch_available_models_from_openrouter
+        
+        # Fetch models from OpenRouter
+        openrouter_models = fetch_available_models_from_openrouter(db=db)
+        
+        added_count = 0
+        skipped_count = 0
+        
+        # Add new models to database
+        for model_data in openrouter_models:
+            # Check if model already exists
+            existing = db.query(AvailableModel).filter(
+                AvailableModel.name == model_data["name"]
+            ).first()
+            
+            if existing:
+                skipped_count += 1
+                continue
+            
+            # Create new model (disabled by default, admin can enable manually)
+            new_model = AvailableModel(
+                name=model_data["name"],
+                display_name=model_data["display_name"],
+                provider=model_data["provider"],
+                description=model_data.get("description"),
+                max_tokens=model_data.get("max_tokens"),
+                cost_per_1k_tokens=model_data.get("cost_per_1k_tokens"),
+                is_enabled=False,  # Disabled by default, admin can enable
+            )
+            db.add(new_model)
+            added_count += 1
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Synced models from OpenRouter: {added_count} added, {skipped_count} already existed",
+            "added": added_count,
+            "skipped": skipped_count,
+            "total_fetched": len(openrouter_models),
+        }
+        
+    except ValueError as e:
+        # API key or configuration error
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to sync models: {str(e)}")
 
 
 # Data sources endpoints

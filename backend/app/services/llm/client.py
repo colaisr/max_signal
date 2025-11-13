@@ -3,7 +3,7 @@ OpenRouter LLM client for making AI calls.
 """
 from openai import OpenAI
 from app.core.config import OPENROUTER_BASE_URL, DEFAULT_LLM_MODEL
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 import logging
 
@@ -129,4 +129,74 @@ class LLMClient:
                 )
             
             raise ValueError(f"LLM call failed: {error_msg}")
+
+
+def fetch_available_models_from_openrouter(
+    api_key: Optional[str] = None,
+    db: Optional[Session] = None
+) -> List[Dict[str, Any]]:
+    """Fetch list of available models from OpenRouter API.
+    
+    Args:
+        api_key: Optional API key. If not provided, will read from Settings
+        db: Database session (required if api_key not provided)
+    
+    Returns:
+        List of model dictionaries with model information from OpenRouter
+    
+    Raises:
+        ValueError: If API key is not configured or API call fails
+    """
+    # Get API key
+    if not api_key:
+        api_key = get_openrouter_api_key(db)
+    
+    if not api_key:
+        raise ValueError(
+            "OpenRouter API key not configured. "
+            "Please set it in Settings → OpenRouter Configuration"
+        )
+    
+    try:
+        # OpenRouter uses OpenAI-compatible API, so we can use the models endpoint
+        client = OpenAI(
+            api_key=api_key,
+            base_url=OPENROUTER_BASE_URL,
+        )
+        
+        # Fetch models from OpenRouter
+        models_response = client.models.list()
+        
+        models = []
+        for model in models_response.data:
+            # Extract provider from model ID (format: provider/model-name)
+            provider = model.id.split('/')[0] if '/' in model.id else 'unknown'
+            
+            # Parse model info
+            model_info = {
+                "id": model.id,
+                "name": model.id,  # Full model ID like "openai/gpt-4o"
+                "display_name": model.id.split('/')[-1].replace('-', ' ').title() if '/' in model.id else model.id,
+                "provider": provider,
+                "description": getattr(model, 'description', None) or f"{provider.title()} model",
+                "max_tokens": getattr(model, 'context_length', None),
+                "cost_per_1k_tokens": None,  # Pricing info not in standard OpenAI response
+            }
+            models.append(model_info)
+        
+        logger.info(f"Fetched {len(models)} models from OpenRouter API")
+        return models
+        
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Failed to fetch models from OpenRouter: {error_msg}")
+        
+        # Check if it's an authentication error
+        if "401" in error_msg or "unauthorized" in error_msg.lower() or "invalid" in error_msg.lower():
+            raise ValueError(
+                f"OpenRouter API key is invalid or expired. "
+                f"Please update it in Settings → OpenRouter Configuration. Error: {error_msg}"
+            )
+        
+        raise ValueError(f"Failed to fetch models from OpenRouter: {error_msg}")
 

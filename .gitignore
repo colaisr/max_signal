@@ -63,4 +63,4 @@ Thumbs.db
 # Server logs and PID files (created by start_all.sh)
 backend.log
 frontend.log
-.server_pids
+.server_pids*

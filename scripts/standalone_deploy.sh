@@ -188,10 +188,15 @@ main() {
     # Step 6: Restart Backend Service
     # ========================================================================
     print_step "🔄 Step 6: Restarting backend service..."
-    if systemctl is-active --quiet max-signal-backend 2>/dev/null; then
-        sudo systemctl restart max-signal-backend
-        sleep 2
+    if systemctl list-units --type=service --state=running | grep -q "max-signal-backend" || systemctl is-active --quiet max-signal-backend 2>/dev/null; then
+        print_info "   Stopping backend service..."
+        sudo systemctl stop max-signal-backend 2>/dev/null || true
+        sleep 1
+        print_info "   Starting backend service..."
+        sudo systemctl start max-signal-backend
+        sleep 3
         
+        # Verify service is running
         if systemctl is-active --quiet max-signal-backend; then
             print_step "✅ Backend service restarted and running"
         else
@@ -201,6 +206,8 @@ main() {
         fi
     else
         print_warning "⚠️  Backend service not found or not active"
+        print_info "   Attempting to start service..."
+        sudo systemctl start max-signal-backend 2>/dev/null || print_warning "   Service may not be installed"
         print_info "   Service name: max-signal-backend"
     fi
     echo ""
@@ -209,10 +216,15 @@ main() {
     # Step 7: Restart Frontend Service
     # ========================================================================
     print_step "🔄 Step 7: Restarting frontend service..."
-    if systemctl is-active --quiet max-signal-frontend 2>/dev/null; then
-        sudo systemctl restart max-signal-frontend
-        sleep 2
+    if systemctl list-units --type=service --state=running | grep -q "max-signal-frontend" || systemctl is-active --quiet max-signal-frontend 2>/dev/null; then
+        print_info "   Stopping frontend service..."
+        sudo systemctl stop max-signal-frontend 2>/dev/null || true
+        sleep 1
+        print_info "   Starting frontend service..."
+        sudo systemctl start max-signal-frontend
+        sleep 3
         
+        # Verify service is running
         if systemctl is-active --quiet max-signal-frontend; then
             print_step "✅ Frontend service restarted and running"
         else
@@ -222,6 +234,8 @@ main() {
         fi
     else
         print_warning "⚠️  Frontend service not found or not active"
+        print_info "   Attempting to start service..."
+        sudo systemctl start max-signal-frontend 2>/dev/null || print_warning "   Service may not be installed"
         print_info "   Service name: max-signal-frontend"
     fi
     echo ""
@@ -231,21 +245,50 @@ main() {
     # ========================================================================
     print_step "🏥 Step 8: Verifying services..."
     
-    # Check backend health
-    sleep 3
-    BACKEND_HEALTH=$(curl -s http://localhost:8000/health 2>/dev/null || echo "failed")
-    if echo "$BACKEND_HEALTH" | grep -q "ok"; then
-        print_step "✅ Backend health check passed"
-    else
-        print_warning "⚠️  Backend health check failed (may need a moment to start)"
+    # Wait a bit more for services to fully start
+    sleep 2
+    
+    # Check backend health (retry up to 3 times)
+    BACKEND_OK=false
+    for i in {1..3}; do
+        BACKEND_HEALTH=$(curl -s http://localhost:8000/health 2>/dev/null || echo "failed")
+        if echo "$BACKEND_HEALTH" | grep -q "ok"; then
+            print_step "✅ Backend health check passed"
+            BACKEND_OK=true
+            break
+        else
+            if [ $i -lt 3 ]; then
+                print_info "   Backend not ready yet, retrying... ($i/3)"
+                sleep 2
+            fi
+        fi
+    done
+    
+    if [ "$BACKEND_OK" = false ]; then
+        print_warning "⚠️  Backend health check failed after retries"
+        print_info "   Check logs: sudo journalctl -u max-signal-backend -n 50"
     fi
     
-    # Check frontend
-    FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null || echo "000")
-    if [ "$FRONTEND_STATUS" = "200" ]; then
-        print_step "✅ Frontend is responding (HTTP $FRONTEND_STATUS)"
-    else
+    # Check frontend (retry up to 3 times)
+    FRONTEND_OK=false
+    for i in {1..3}; do
+        FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null || echo "000")
+        if [ "$FRONTEND_STATUS" = "200" ]; then
+            print_step "✅ Frontend is responding (HTTP $FRONTEND_STATUS)"
+            FRONTEND_OK=true
+            break
+        else
+            if [ $i -lt 3 ]; then
+                print_info "   Frontend not ready yet, retrying... ($i/3)"
+                sleep 2
+            fi
+        fi
+    done
+    
+    if [ "$FRONTEND_OK" = false ]; then
         print_warning "⚠️  Frontend check returned HTTP $FRONTEND_STATUS"
+        print_info "   Check logs: sudo journalctl -u max-signal-frontend -n 50"
+        print_info "   This may indicate the frontend build needs to be regenerated"
     fi
     echo ""
     

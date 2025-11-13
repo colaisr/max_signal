@@ -91,12 +91,20 @@ async def create_run(
     # Create or get instrument record
     instrument = db.query(Instrument).filter(Instrument.symbol == request.instrument).first()
     if not instrument:
-        # Determine type
+        # Determine type and exchange
         inst_type = "crypto" if "/" in request.instrument.upper() else "equity"
+        
+        # Use exchange from market_data if available, otherwise try to determine from symbol
+        exchange = market_data.exchange
+        if not exchange or exchange == "unknown":
+            # Import exchange detection function
+            from app.api.instruments import _get_exchange_for_symbol
+            exchange = _get_exchange_for_symbol(request.instrument) or "unknown"
+        
         instrument = Instrument(
             symbol=request.instrument,
             type=inst_type,
-            exchange=market_data.exchange or "unknown",
+            exchange=exchange,
             is_enabled=False  # New instruments are disabled by default (admin must enable in Settings)
         )
         db.add(instrument)

@@ -81,6 +81,63 @@ def _normalize_futures_ticker(symbol: str) -> str:
     return normalized
 
 
+def _get_exchange_for_symbol(symbol: str) -> str | None:
+    """Determine the exchange for a symbol.
+    
+    IMPORTANT: Checks MOEX first to avoid conflicts. If MOEX returns a ticker
+    that looks like a futures contract (e.g., NG1!), it should be identified as MOEX.
+    
+    Returns:
+        Exchange name (NYMEX, CME, NASDAQ, NYSE, MOEX, etc.) or None
+    """
+    symbol_upper = symbol.upper()
+    
+    # FIRST: Check if it's a MOEX instrument (priority check to avoid conflicts)
+    # Note: MOEX currently doesn't return NG1! or B1!, but if it did, this ensures
+    # it would be correctly identified as MOEX, not NYMEX
+    try:
+        moex_symbols = _get_all_moex_instruments()
+        if symbol_upper in moex_symbols:
+            return 'MOEX'
+    except Exception:
+        # If MOEX API fails, continue with other checks
+        pass
+    
+    # Futures contracts (NYMEX/CME) - only if NOT in MOEX
+    futures_tickers = [
+        'NG=F', 'NG1', 'NG1!',  # Natural Gas
+        'BZ=F', 'B1', 'B1!',    # Brent Crude
+        'CL=F', 'CL1', 'CL1!',  # WTI Crude
+        'HO=F', 'HO1', 'HO1!',  # Heating Oil
+        'RB=F', 'RB1', 'RB1!',  # Gasoline
+        'GC=F', 'GC1', 'GC1!',  # Gold
+        'SI=F', 'SI1', 'SI1!',  # Silver
+        'PL=F', 'PL1', 'PL1!',  # Platinum
+        'PA=F', 'PA1', 'PA1!',  # Palladium
+        'ZC=F', 'ZC1', 'ZC1!',  # Corn
+        'ZS=F', 'ZS1', 'ZS1!',  # Soybeans
+        'ZW=F', 'ZW1', 'ZW1!',  # Wheat
+    ]
+    
+    if symbol_upper in futures_tickers:
+        # Most energy futures are NYMEX, metals/agriculture are CME
+        if symbol_upper.startswith(('NG', 'BZ', 'CL', 'HO', 'RB')):
+            return 'NYMEX'  # New York Mercantile Exchange
+        else:
+            return 'CME'  # Chicago Mercantile Exchange
+    
+    # NASDAQ stocks
+    nasdaq_stocks = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"]
+    if symbol_upper in nasdaq_stocks:
+        return 'NASDAQ'
+    
+    # Default for other US equities
+    if not symbol_upper.startswith(('/')):  # Not crypto
+        return 'NYSE'  # Default US exchange
+    
+    return None
+
+
 def _get_display_name(symbol: str, type: str, exchange: str | None) -> str:
     """Generate display name for instrument."""
     if type == "crypto":
@@ -90,15 +147,15 @@ def _get_display_name(symbol: str, type: str, exchange: str | None) -> str:
         # For equities, try to make it readable
         # Map Bloomberg-style futures to readable names
         display_map = {
-            'NG=F': 'Natural Gas Futures',
-            'NG1': 'Natural Gas Futures',
-            'NG1!': 'Natural Gas Futures',
-            'BZ=F': 'Brent Crude Oil Futures',
-            'B1': 'Brent Crude Oil Futures',
-            'B1!': 'Brent Crude Oil Futures',
-            'CL=F': 'WTI Crude Oil Futures',
-            'GC=F': 'Gold Futures',
-            'SI=F': 'Silver Futures',
+            'NG=F': 'Natural Gas Futures (NYMEX)',
+            'NG1': 'Natural Gas Futures (NYMEX)',
+            'NG1!': 'Natural Gas Futures (NYMEX)',
+            'BZ=F': 'Brent Crude Oil Futures (NYMEX)',
+            'B1': 'Brent Crude Oil Futures (NYMEX)',
+            'B1!': 'Brent Crude Oil Futures (NYMEX)',
+            'CL=F': 'WTI Crude Oil Futures (NYMEX)',
+            'GC=F': 'Gold Futures (CME)',
+            'SI=F': 'Silver Futures (CME)',
         }
         return display_map.get(symbol.upper(), symbol)
 
@@ -150,22 +207,58 @@ def _get_all_crypto_instruments() -> List[str]:
 def _get_all_moex_instruments() -> List[str]:
     """Get all available MOEX instruments from MOEX ISS API.
     
-    Returns list of tickers (e.g., ['SBER', 'GAZP', 'ROSN']).
+    Returns list of tickers including stocks and futures (e.g., ['SBER', 'GAZP', 'NGX5']).
     Uses MOEX ISS API which is free and public.
+    
+    Queries:
+    - TQBR board: T+2 stocks (main equity board) via apimoex
+    - Futures engine: All futures contracts via direct API call
     """
     try:
         import requests
         import apimoex
         
+        all_tickers = set()
+        
         with requests.Session() as session:
             # Get securities from main trading board (TQBR - T+2 stocks)
-            data = apimoex.get_board_securities(session, board='TQBR')
+            try:
+                data = apimoex.get_board_securities(session, board='TQBR')
+                tickers = set(sec.get('SECID') for sec in data if sec.get('SECID'))
+                all_tickers.update(tickers)
+                logger.info(f"Fetched {len(tickers)} MOEX stocks from TQBR board")
+            except Exception as e:
+                logger.warning(f"Failed to fetch TQBR board: {e}")
             
-            # Extract tickers
-            tickers = sorted(set(sec.get('SECID') for sec in data if sec.get('SECID')))
-            
-            logger.info(f"Fetched {len(tickers)} MOEX instruments from ISS API")
-            return tickers
+            # Get futures contracts from MOEX ISS API (futures engine)
+            # Futures are in a different engine/market structure: engines/futures/markets/forts/boards/FUT
+            try:
+                futures_url = "https://iss.moex.com/iss/engines/futures/markets/forts/boards/FUT/securities.json"
+                futures_response = session.get(futures_url, params={'limit': 1000})
+                futures_response.raise_for_status()
+                futures_data = futures_response.json()
+                
+                # Extract securities data
+                securities = futures_data.get('securities', {}).get('data', [])
+                columns = futures_data.get('securities', {}).get('columns', [])
+                
+                # Find SECID column index
+                secid_idx = columns.index('SECID') if 'SECID' in columns else 0
+                
+                # Extract tickers
+                futures_tickers = set()
+                for sec in securities:
+                    if len(sec) > secid_idx and sec[secid_idx]:
+                        futures_tickers.add(sec[secid_idx])
+                
+                all_tickers.update(futures_tickers)
+                logger.info(f"Fetched {len(futures_tickers)} MOEX futures contracts from FUT board")
+            except Exception as e:
+                logger.warning(f"Failed to fetch MOEX futures: {e}")
+        
+        tickers_list = sorted(all_tickers)
+        logger.info(f"Total MOEX instruments fetched: {len(tickers_list)} (stocks + futures)")
+        return tickers_list
             
     except ImportError:
         logger.warning("apimoex package not installed. MOEX instruments will not be available.")
@@ -316,11 +409,13 @@ async def list_all_instruments(db: Session = Depends(get_db)):
     equity_symbols = _get_all_equity_instruments()
     for symbol in equity_symbols:
         db_inst = db_instruments_map.get(symbol)
+        # Determine correct exchange (NYMEX/CME for futures, NASDAQ/NYSE for stocks)
+        exchange = _get_exchange_for_symbol(symbol)
         result.append(InstrumentWithStatusResponse(
             symbol=symbol,
             type="equity",
-            exchange="NASDAQ" if symbol in ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"] else "NYSE",
-            display_name=_get_display_name(symbol, "equity", None),
+            exchange=exchange,
+            display_name=_get_display_name(symbol, "equity", exchange),
             is_enabled=db_inst.is_enabled if db_inst else False,  # Default to disabled (admin must enable)
             id=db_inst.id if db_inst else None
         ))
@@ -371,7 +466,8 @@ async def toggle_instrument(request: ToggleInstrumentRequest, db: Session = Depe
             exchange = "binance"
         else:
             inst_type = "equity"
-            exchange = None  # Will be determined when data is fetched
+            # Use exchange detection function to determine correct exchange (NYMEX/CME/NASDAQ/NYSE)
+            exchange = _get_exchange_for_symbol(symbol) or None  # Will be determined when data is fetched if None
         
         # Create new instrument - if user is toggling, they want it enabled
         instrument = Instrument(

@@ -57,7 +57,7 @@ Constraints and preferences:
   - Data Providers: CCXT (crypto), yfinance (equities), Tinkoff Invest API (MOEX)
 
 - Data model (MySQL)
-  - `instruments`: id, symbol, type, exchange, figi (Tinkoff FIGI for MOEX instruments), is_enabled (admin toggle for dropdown visibility)
+  - `instruments`: id, symbol, type, exchange (NYMEX/CME/NASDAQ/NYSE/MOEX/binance), figi (Tinkoff FIGI for MOEX instruments), is_enabled (admin toggle for dropdown visibility)
   - `analysis_runs`: id, trigger_type (manual/scheduled), instrument_id, timeframe, status (queued/running/succeeded/failed), created_at, finished_at, cost_est_total
   - `analysis_steps`: id, run_id, step_name (wyckoff/smc/vsa/delta/ict/merge), input_blob, output_blob, llm_model, tokens, cost_est, created_at
 - `telegram_posts`: id, run_id, message_text, status (pending/sent/failed), message_id, sent_at
@@ -272,8 +272,11 @@ Constraints and preferences:
 ### 6) Data Adapters
 
 - CCXT (crypto): normalized OHLCV, adjustable timeframe, exchange-specific symbol mapping
-- yfinance (equities): OHLCV daily/intraday; handle API limits and caching
-- Tinkoff Invest API (MOEX): Russian stocks, bonds, ETFs from Moscow Exchange
+- yfinance (equities & US futures): OHLCV daily/intraday; handle API limits and caching
+  - Supports both Yahoo Finance tickers (NG=F, BZ=F) and Bloomberg-style tickers (NG1, NG1!, B1, B1!)
+  - Automatic ticker mapping: Bloomberg-style tickers auto-convert to Yahoo Finance equivalents
+  - Futures contracts correctly identified by exchange (NYMEX for energy, CME for metals/agriculture)
+- Tinkoff Invest API (MOEX): Russian stocks, bonds, ETFs, and futures from Moscow Exchange
   - Uses FIGI (Financial Instrument Global Identifier) for instrument identification
   - FIGI mapping cached in `instruments` table (`figi` column)
   - Automatic FIGI lookup via Tinkoff API when instrument is first used
@@ -281,6 +284,7 @@ Constraints and preferences:
   - Supports timeframes: M1, M5, M15, H1, D1
 - `data_cache` table for short-lived cache to reduce repeated fetches
 - Instrument routing: `DataService` automatically selects adapter based on `exchange` field in `instruments` table
+- Exchange detection: Automatic identification of NYMEX/CME/NASDAQ/NYSE/MOEX based on symbol patterns
 
 
 ### 7) Scheduling
@@ -441,9 +445,13 @@ Constraints and preferences:
 - Data adapters
   - [x] Crypto OHLCV fetched ✅
   - [x] Equity OHLCV fetched ✅
-  - [x] MOEX OHLCV fetched via Tinkoff API ✅
+  - [x] US Futures OHLCV fetched via yfinance (supports Bloomberg-style tickers NG1, B1!, etc.) ✅
+  - [x] MOEX Stocks OHLCV fetched via Tinkoff API ✅
+  - [x] MOEX Futures instruments fetched from MOEX ISS API (FUT board) ✅
   - [x] FIGI mapping and caching implemented ✅
   - [x] Instrument routing based on exchange field ✅
+  - [x] Exchange detection (NYMEX/CME/NASDAQ/NYSE/MOEX) ✅
+  - [x] Bloomberg-to-Yahoo Finance ticker mapping ✅
   - [x] Normalization verified ✅
   - [x] Caching implemented ✅
   - [x] Minimal UI working ✅
@@ -514,6 +522,7 @@ Constraints and preferences:
 - [x] Analysis Configuration Editing ✅ (Completed: Editable models, prompts, data sources before running)
 - [x] Telegram Integration ✅ (Completed: Backend publish endpoint, message splitting, Settings page, credentials from AppSettings, TelegramUser model, bot handler for /start/help/status commands, automatic user registration, direct messaging to users, error handling for partial failures)
 - [x] Settings Page Enhancements ✅ (Completed: Model syncing from OpenRouter API, search and filter functionality for models, scrollable model list, enabled/free filters, provider filter dropdown)
+- [x] Futures Contracts Support ✅ (Completed: Bloomberg-style ticker support (NG1, B1!, etc.), MOEX futures fetching (NGX5, 400+ contracts), exchange detection (NYMEX/CME/MOEX), automatic ticker mapping)
 - [ ] Refactor pipeline to use analysis_type configuration (accepts custom_config, needs full implementation)
 - [ ] Scheduling
 - [x] Deployment (single VM) ✅ (Scripts and documentation ready - see `docs/PRODUCTION_DEPLOYMENT.md`)

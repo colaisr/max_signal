@@ -315,35 +315,51 @@ class TinkoffAdapter(DataAdapter):
                     logger.warning(f"No instruments found for ticker: {ticker}")
                     return None
                 
-                # Find MOEX share with matching ticker
+                # Find MOEX instruments (shares OR futures) with matching ticker
                 # Prefer BBG FIGI (Bloomberg) over TCS (Tinkoff internal)
-                found_shares = []
+                # Note: Tinkoff API uses "futures" (plural) not "future" (singular)
+                found_instruments = []
                 for inst in search_result.instruments:
-                    if inst.instrument_type == "share" and inst.ticker == ticker:
-                        found_shares.append(inst)
+                    # Check for both shares and futures (note: Tinkoff uses "futures" plural)
+                    if inst.ticker == ticker and inst.instrument_type in ["share", "future", "futures"]:
+                        found_instruments.append(inst)
                 
                 # Sort: prefer BBG FIGI
-                found_shares.sort(key=lambda x: (not x.figi.startswith("BBG"), x.figi))
+                found_instruments.sort(key=lambda x: (not x.figi.startswith("BBG"), x.figi))
                 
-                for inst in found_shares:
+                for inst in found_instruments:
                     # Verify it's MOEX by getting full details
                     try:
-                        full_inst = client.instruments.share_by(
-                            id_type=InstrumentIdType.INSTRUMENT_ID_TYPE_FIGI,
-                            id=inst.figi
-                        )
-                        if full_inst.instrument.exchange == "MOEX":
+                        if inst.instrument_type == "share":
+                            full_inst = client.instruments.share_by(
+                                id_type=InstrumentIdType.INSTRUMENT_ID_TYPE_FIGI,
+                                id=inst.figi
+                            )
+                            exchange = full_inst.instrument.exchange
+                        elif inst.instrument_type in ["future", "futures"]:
+                            # Tinkoff API uses "futures" (plural) for futures contracts
+                            full_inst = client.instruments.future_by(
+                                id_type=InstrumentIdType.INSTRUMENT_ID_TYPE_FIGI,
+                                id=inst.figi
+                            )
+                            exchange = full_inst.instrument.exchange
+                        else:
+                            continue
+                        
+                        # MOEX futures can have exchange "forts_futures_weekend" or "MOEX"
+                        # Both are valid MOEX exchanges
+                        if exchange == "MOEX" or "forts" in exchange.lower() or "moex" in exchange.lower():
                             figi = inst.figi
                             # Cache FIGI in database
                             if instrument:
                                 instrument.figi = figi
-                                instrument.exchange = "MOEX"  # Ensure exchange is set
+                                instrument.exchange = "MOEX"  # Normalize to MOEX
                                 db.commit()
                             else:
                                 # Create instrument record if it doesn't exist
                                 instrument = Instrument(
                                     symbol=ticker,
-                                    type="equity",
+                                    type="equity",  # Keep as equity for now (futures are also equity-like)
                                     exchange="MOEX",
                                     figi=figi,
                                     is_enabled=False
@@ -351,19 +367,20 @@ class TinkoffAdapter(DataAdapter):
                                 db.add(instrument)
                                 db.commit()
                             
-                            logger.info(f"Cached FIGI {figi} for ticker {ticker}")
+                            logger.info(f"Cached FIGI {figi} for ticker {ticker} (type: {inst.instrument_type}, exchange: {exchange})")
                             return figi
                     except Exception as e:
-                        logger.warning(f"Could not verify exchange for {ticker} (FIGI: {inst.figi}): {e}")
+                        logger.warning(f"Could not verify exchange for {ticker} (FIGI: {inst.figi}, type: {inst.instrument_type}): {e}")
                         continue
                 
-                # If we found shares but couldn't verify, try using first one anyway (might be MOEX)
-                if found_shares:
-                    logger.warning(f"Could not verify MOEX exchange for {ticker}, but found shares. Using first: {found_shares[0].figi}")
-                    figi = found_shares[0].figi
+                # If we found instruments but couldn't verify exchange, try using first one anyway
+                # This handles cases where exchange name might be different (e.g., "forts_futures_weekend")
+                if found_instruments:
+                    logger.info(f"Using first found instrument for {ticker}: {found_instruments[0].figi} (type: {found_instruments[0].instrument_type})")
+                    figi = found_instruments[0].figi
                     if instrument:
                         instrument.figi = figi
-                        instrument.exchange = "MOEX"
+                        instrument.exchange = "MOEX"  # Normalize to MOEX
                         db.commit()
                     else:
                         instrument = Instrument(
@@ -377,7 +394,7 @@ class TinkoffAdapter(DataAdapter):
                         db.commit()
                     return figi
                 
-                logger.warning(f"Could not find MOEX share for ticker: {ticker}")
+                logger.warning(f"Could not find MOEX instrument (share or future) for ticker: {ticker}")
                 return None
                 
         except Exception as e:

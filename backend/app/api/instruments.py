@@ -37,6 +37,50 @@ class ToggleInstrumentRequest(BaseModel):
     symbol: str
 
 
+def _normalize_futures_ticker(symbol: str) -> str:
+    """Convert Bloomberg-style futures tickers to Yahoo Finance format.
+    
+    Maps common Bloomberg futures tickers to Yahoo Finance equivalents.
+    Examples:
+        NG1 -> NG=F (Natural Gas)
+        B1! -> BZ=F (Brent Crude Oil)
+        CL1 -> CL=F (WTI Crude Oil)
+        GC1 -> GC=F (Gold)
+        SI1 -> SI=F (Silver)
+    """
+    # Bloomberg to Yahoo Finance ticker mapping
+    ticker_map = {
+        'NG1': 'NG=F',      # Natural Gas
+        'NG1!': 'NG=F',     # Natural Gas (continuous)
+        'B1': 'BZ=F',       # Brent Crude Oil
+        'B1!': 'BZ=F',      # Brent Crude Oil (continuous)
+        'CL1': 'CL=F',      # WTI Crude Oil
+        'CL1!': 'CL=F',     # WTI Crude Oil (continuous)
+        'GC1': 'GC=F',      # Gold
+        'GC1!': 'GC=F',     # Gold (continuous)
+        'SI1': 'SI=F',      # Silver
+        'SI1!': 'SI=F',     # Silver (continuous)
+        'PL1': 'PL=F',      # Platinum
+        'PL1!': 'PL=F',     # Platinum (continuous)
+        'PA1': 'PA=F',      # Palladium
+        'PA1!': 'PA=F',     # Palladium (continuous)
+        'HO1': 'HO=F',      # Heating Oil
+        'HO1!': 'HO=F',     # Heating Oil (continuous)
+        'RB1': 'RB=F',      # RBOB Gasoline
+        'RB1!': 'RB=F',     # RBOB Gasoline (continuous)
+        'ZC1': 'ZC=F',      # Corn
+        'ZC1!': 'ZC=F',     # Corn (continuous)
+        'ZS1': 'ZS=F',      # Soybeans
+        'ZS1!': 'ZS=F',     # Soybeans (continuous)
+        'ZW1': 'ZW=F',      # Wheat
+        'ZW1!': 'ZW=F',     # Wheat (continuous)
+    }
+    
+    # Check if symbol needs mapping
+    normalized = ticker_map.get(symbol.upper(), symbol)
+    return normalized
+
+
 def _get_display_name(symbol: str, type: str, exchange: str | None) -> str:
     """Generate display name for instrument."""
     if type == "crypto":
@@ -44,8 +88,19 @@ def _get_display_name(symbol: str, type: str, exchange: str | None) -> str:
         return symbol.replace("/", " / ")
     else:
         # For equities, try to make it readable
-        # Could be enhanced with a mapping of common tickers
-        return symbol
+        # Map Bloomberg-style futures to readable names
+        display_map = {
+            'NG=F': 'Natural Gas Futures',
+            'NG1': 'Natural Gas Futures',
+            'NG1!': 'Natural Gas Futures',
+            'BZ=F': 'Brent Crude Oil Futures',
+            'B1': 'Brent Crude Oil Futures',
+            'B1!': 'Brent Crude Oil Futures',
+            'CL=F': 'WTI Crude Oil Futures',
+            'GC=F': 'Gold Futures',
+            'SI=F': 'Silver Futures',
+        }
+        return display_map.get(symbol.upper(), symbol)
 
 
 def _get_predefined_instruments() -> List[Dict]:
@@ -150,15 +205,48 @@ def _get_all_equity_instruments() -> List[str]:
     # Indices (as ETFs)
     indices = ["SPY", "QQQ", "DIA", "IWM", "VIX"]
     
-    # Commodity futures (Yahoo Finance =F suffix)
+    # Commodity futures (Yahoo Finance =F suffix and Bloomberg-style tickers)
+    # Note: Bloomberg-style tickers (NG1, B1!, etc.) will be mapped to Yahoo Finance equivalents
     commodity_futures = [
+        # Energy
         "CL=F",  # WTI Crude Oil
+        "CL1",   # WTI Crude Oil (Bloomberg style)
+        "CL1!",  # WTI Crude Oil (continuous)
         "BZ=F",  # Brent Crude Oil
+        "B1",    # Brent Crude Oil (Bloomberg style)
+        "B1!",   # Brent Crude Oil (continuous)
         "NG=F",  # Henry Hub Natural Gas
+        "NG1",   # Natural Gas (Bloomberg style)
+        "NG1!",  # Natural Gas (continuous)
+        "HO=F",  # Heating Oil
+        "HO1",   # Heating Oil (Bloomberg style)
+        "HO1!",  # Heating Oil (continuous)
+        "RB=F",  # RBOB Gasoline
+        "RB1",   # RBOB Gasoline (Bloomberg style)
+        "RB1!",  # RBOB Gasoline (continuous)
+        # Metals
         "GC=F",  # Gold
+        "GC1",   # Gold (Bloomberg style)
+        "GC1!",  # Gold (continuous)
         "SI=F",  # Silver
+        "SI1",   # Silver (Bloomberg style)
+        "SI1!",  # Silver (continuous)
         "PL=F",  # Platinum
+        "PL1",   # Platinum (Bloomberg style)
+        "PL1!",  # Platinum (continuous)
         "PA=F",  # Palladium
+        "PA1",   # Palladium (Bloomberg style)
+        "PA1!",  # Palladium (continuous)
+        # Agriculture
+        "ZC=F",  # Corn
+        "ZC1",   # Corn (Bloomberg style)
+        "ZC1!",  # Corn (continuous)
+        "ZS=F",  # Soybeans
+        "ZS1",   # Soybeans (Bloomberg style)
+        "ZS1!",  # Soybeans (continuous)
+        "ZW=F",  # Wheat
+        "ZW1",   # Wheat (Bloomberg style)
+        "ZW1!",  # Wheat (continuous)
     ]
     
     # Combine and deduplicate

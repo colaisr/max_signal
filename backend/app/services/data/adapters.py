@@ -139,6 +139,47 @@ class CCXTAdapter(DataAdapter):
 class YFinanceAdapter(DataAdapter):
     """yfinance adapter for equities."""
     
+    def _normalize_futures_ticker(self, symbol: str) -> str:
+        """Convert Bloomberg-style futures tickers to Yahoo Finance format.
+        
+        Maps common Bloomberg futures tickers to Yahoo Finance equivalents.
+        Examples:
+            NG1 -> NG=F (Natural Gas)
+            B1! -> BZ=F (Brent Crude Oil)
+            CL1 -> CL=F (WTI Crude Oil)
+        """
+        # Bloomberg to Yahoo Finance ticker mapping
+        ticker_map = {
+            'NG1': 'NG=F',      # Natural Gas
+            'NG1!': 'NG=F',     # Natural Gas (continuous)
+            'B1': 'BZ=F',       # Brent Crude Oil
+            'B1!': 'BZ=F',      # Brent Crude Oil (continuous)
+            'CL1': 'CL=F',      # WTI Crude Oil
+            'CL1!': 'CL=F',     # WTI Crude Oil (continuous)
+            'GC1': 'GC=F',      # Gold
+            'GC1!': 'GC=F',     # Gold (continuous)
+            'SI1': 'SI=F',      # Silver
+            'SI1!': 'SI=F',     # Silver (continuous)
+            'PL1': 'PL=F',      # Platinum
+            'PL1!': 'PL=F',     # Platinum (continuous)
+            'PA1': 'PA=F',      # Palladium
+            'PA1!': 'PA=F',     # Palladium (continuous)
+            'HO1': 'HO=F',      # Heating Oil
+            'HO1!': 'HO=F',     # Heating Oil (continuous)
+            'RB1': 'RB=F',      # RBOB Gasoline
+            'RB1!': 'RB=F',     # RBOB Gasoline (continuous)
+            'ZC1': 'ZC=F',      # Corn
+            'ZC1!': 'ZC=F',     # Corn (continuous)
+            'ZS1': 'ZS=F',      # Soybeans
+            'ZS1!': 'ZS=F',     # Soybeans (continuous)
+            'ZW1': 'ZW=F',      # Wheat
+            'ZW1!': 'ZW=F',     # Wheat (continuous)
+        }
+        
+        # Check if symbol needs mapping
+        normalized = ticker_map.get(symbol.upper(), symbol)
+        return normalized
+    
     def _normalize_timeframe(self, timeframe: str) -> str:
         """Convert our timeframe to yfinance interval."""
         mapping = {
@@ -159,7 +200,9 @@ class YFinanceAdapter(DataAdapter):
         since: Optional[datetime] = None
     ) -> MarketData:
         """Fetch OHLCV data from yfinance."""
-        ticker = yf.Ticker(instrument)
+        # Normalize Bloomberg-style futures tickers to Yahoo Finance format
+        normalized_instrument = self._normalize_futures_ticker(instrument)
+        ticker = yf.Ticker(normalized_instrument)
         interval = self._normalize_timeframe(timeframe)
         
         # Calculate period
@@ -185,7 +228,7 @@ class YFinanceAdapter(DataAdapter):
                 df = ticker.history(period=period, interval=interval)
             
             if df.empty:
-                raise ValueError(f"No data available for {instrument}")
+                raise ValueError(f"No data available for {instrument} (tried {normalized_instrument})")
             
             # Limit results
             df = df.tail(limit)
@@ -203,14 +246,14 @@ class YFinanceAdapter(DataAdapter):
                 ))
             
             return MarketData(
-                instrument=instrument,
+                instrument=instrument,  # Keep original symbol for display
                 timeframe=timeframe,
                 exchange='yfinance',
                 candles=candles,
                 fetched_at=datetime.now(timezone.utc)
             )
         except Exception as e:
-            raise ValueError(f"Failed to fetch data from yfinance: {str(e)}")
+            raise ValueError(f"Failed to fetch data from yfinance for {instrument} (tried {normalized_instrument}): {str(e)}")
 
 
 class TinkoffAdapter(DataAdapter):

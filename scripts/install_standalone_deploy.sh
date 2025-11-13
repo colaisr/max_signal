@@ -32,12 +32,22 @@ if [ ! -f "$STANDALONE_SCRIPT" ]; then
     exit 1
 fi
 
-# Backup old script if it exists
-if [ -f "$TARGET" ]; then
+# Backup old script if it exists (handle both symlinks and regular files)
+if [ -L "$TARGET" ] || [ -f "$TARGET" ]; then
     echo -e "${YELLOW}⚠️  Found existing script at $TARGET${NC}"
+    if [ -L "$TARGET" ]; then
+        echo "   It's a symlink pointing to: $(readlink "$TARGET")"
+    fi
     BACKUP="${TARGET}.backup.$(date +%Y%m%d_%H%M%S)"
     echo "   Backing up to: $BACKUP"
-    cp "$TARGET" "$BACKUP"
+    # If it's a symlink, copy the target; otherwise copy the file
+    if [ -L "$TARGET" ]; then
+        cp "$(readlink -f "$TARGET")" "$BACKUP" 2>/dev/null || cp "$TARGET" "$BACKUP"
+    else
+        cp "$TARGET" "$BACKUP"
+    fi
+    # Remove old symlink or file
+    rm -f "$TARGET"
 fi
 
 # Install standalone script

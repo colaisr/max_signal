@@ -5,16 +5,18 @@
 **SSH into production server and run:**
 
 ```bash
-cd /srv/max-signal
-git pull origin main
-sudo ./scripts/full_production_deploy.sh
+max-signal-deploy
 ```
 
 This single command will:
 1. ✅ Pull latest changes from git
-2. ✅ Install/update standalone deploy script
-3. ✅ Run complete deployment (pull, update, migrate, build, restart)
-4. ✅ Validate everything is working
+2. ✅ Update backend dependencies
+3. ✅ Run database migrations
+4. ✅ Update frontend dependencies
+5. ✅ Build frontend for production
+6. ✅ Restart backend service
+7. ✅ Restart frontend service
+8. ✅ Validate everything is working
 
 ## What Gets Fixed
 
@@ -43,24 +45,18 @@ sudo journalctl -u max-signal-frontend -n 50
 - Check browser console (should have no CSS errors)
 - Verify page loads with proper styling
 
-## Alternative: Step-by-Step
+## First-Time Setup
 
-If you prefer step-by-step:
+If `max-signal-deploy` is not installed yet:
 
 ```bash
-# 1. Pull latest
 cd /srv/max-signal
 git pull origin main
-
-# 2. Install deploy script
 sudo ./scripts/install_standalone_deploy.sh
-
-# 3. Deploy
 max-signal-deploy
-
-# 4. Validate
-./scripts/validate_deployment.sh
 ```
+
+After installation, you can run `max-signal-deploy` from anywhere!
 
 ## Troubleshooting
 

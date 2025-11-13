@@ -215,10 +215,40 @@ cd /srv/max-signal
 ./scripts/deploy.sh  # Use script from git repo
 ```
 
-**If you have a copy at `/usr/local/bin/max-signal-deploy`:**
-- Remove it: `sudo rm /usr/local/bin/max-signal-deploy`
-- Or create a symlink: `sudo ln -s /srv/max-signal/scripts/deploy.sh /usr/local/bin/max-signal-deploy`
-- This ensures you always use the latest version from git
+**Installing Standalone Deploy Script (Recommended):**
+
+The standalone deploy script is completely independent and can be placed outside the tracked folder. It does everything automatically:
+
+```bash
+cd /srv/max-signal
+sudo ./scripts/install_standalone_deploy.sh
+```
+
+This installs `max-signal-deploy` to `/usr/local/bin/` which:
+- ✅ Pulls latest git changes
+- ✅ Updates backend dependencies
+- ✅ Runs database migrations
+- ✅ Updates frontend dependencies
+- ✅ Builds frontend for production
+- ✅ Restarts backend service
+- ✅ Restarts frontend service
+- ✅ Verifies services are running
+
+**Usage:**
+```bash
+max-signal-deploy  # Run from anywhere!
+```
+
+**Why standalone?**
+- Never gets overwritten by git pulls
+- Completely independent (doesn't depend on repo files)
+- Can be customized without affecting git repo
+- Safe to run from anywhere (including as root)
+
+**Configuration:**
+Edit `/usr/local/bin/max-signal-deploy` to change:
+- `PROJECT_ROOT` (default: `/srv/max-signal`)
+- `GIT_BRANCH` (default: `main`)
 
 1. **`deploy.sh`** - Complete deployment preparation:
    - Pulls latest changes from repository (including script updates)

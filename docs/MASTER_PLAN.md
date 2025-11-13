@@ -146,10 +146,15 @@ Constraints and preferences:
   - **Telegram**: Bot token, channel ID, publishing settings, active users count
   - **OpenRouter Configuration**: API key for OpenRouter (required for LLM calls and model syncing)
   - **Tinkoff Invest API**: API token for MOEX instruments (required for Russian stocks/bonds/ETFs)
-  - **Available Instruments**: Searchable list of all instruments (crypto, equities, MOEX) with enable/disable toggles
+  - **Available Instruments**: Searchable list of all instruments (crypto, equities, US futures, MOEX stocks & futures) with enable/disable toggles
     - Enabled instruments appear in dropdown selectors
-    - Instruments fetched dynamically from APIs (MOEX ISS API for Russian market)
+    - Instruments fetched dynamically from APIs:
+      - Crypto: CCXT (Binance USDT pairs)
+      - US Equities & Futures: Curated list + Bloomberg-style tickers (NG1, B1!, etc.) mapped to Yahoo Finance
+      - MOEX Stocks: MOEX ISS API (TQBR board)
+      - MOEX Futures: MOEX ISS API (FUT board) - includes NGX5 and 400+ other futures contracts
     - Supports search and scrollable view (shows 10 items at a time)
+    - Exchange correctly identified: NYMEX/CME for US futures, MOEX for Russian instruments
   - **User Preferences**: Profile, theme, timezone, notifications
   - **System** (admin): Feature flags, cost limits
 

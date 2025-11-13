@@ -95,10 +95,15 @@ class BaseAnalyzer:
         """
         # Use step_config if provided, otherwise fall back to hardcoded methods
         if step_config:
-            system_prompt = step_config.get("system_prompt") or self.get_system_prompt()
-            user_prompt_template = step_config.get("user_prompt_template")
-            if user_prompt_template:
-                user_prompt = format_user_prompt_template(user_prompt_template, context)
+            # Use system_prompt from config if provided, otherwise use default
+            if "system_prompt" in step_config and step_config["system_prompt"]:
+                system_prompt = step_config["system_prompt"]
+            else:
+                system_prompt = self.get_system_prompt()
+            
+            # Use user_prompt_template from config if provided, otherwise use default
+            if "user_prompt_template" in step_config and step_config["user_prompt_template"]:
+                user_prompt = format_user_prompt_template(step_config["user_prompt_template"], context)
             else:
                 user_prompt = self.build_user_prompt(context)
             

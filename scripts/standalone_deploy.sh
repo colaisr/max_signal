@@ -79,6 +79,9 @@ main() {
     CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "$GIT_BRANCH")
     print_info "   Current branch: $CURRENT_BRANCH"
     
+    # Get current commit before pull
+    OLD_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
+    
     # Fetch latest changes
     if ! git fetch origin "$CURRENT_BRANCH" 2>/dev/null; then
         print_warning "⚠️  Could not fetch from origin, trying current branch..."
@@ -88,9 +91,26 @@ main() {
     # Reset to latest remote state
     if git rev-parse --verify "origin/$CURRENT_BRANCH" >/dev/null 2>&1; then
         git reset --hard "origin/$CURRENT_BRANCH"
+        NEW_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
+        
+        # Show file changes summary
+        if [ "$OLD_COMMIT" != "" ] && [ "$OLD_COMMIT" != "$NEW_COMMIT" ]; then
+            print_info "   Changes detected, showing file summary:"
+            CHANGES=$(git diff --stat "$OLD_COMMIT" "$NEW_COMMIT" 2>/dev/null || echo "")
+            if [ -n "$CHANGES" ]; then
+                echo "$CHANGES" | while IFS= read -r line; do
+                    echo "   $line"
+                done
+            else
+                print_info "   (No file changes to display)"
+            fi
+        else
+            print_info "   No changes"
+        fi
         print_step "✅ Repository updated to latest"
     else
         print_warning "⚠️  Remote branch not found, using local state"
+        print_info "   No changes"
     fi
     echo ""
     

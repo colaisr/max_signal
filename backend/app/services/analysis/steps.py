@@ -1,9 +1,68 @@
 """
 Base class and individual step analyzers for the Daystart analysis pipeline.
 """
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from app.services.llm.client import LLMClient
 from app.services.data.normalized import MarketData
+
+
+def format_user_prompt_template(template: str, context: Dict[str, Any]) -> str:
+    """Format user prompt template with context variables.
+    
+    Supports placeholders:
+    - {instrument} - instrument symbol
+    - {timeframe} - timeframe
+    - {market_data_summary} - formatted market data summary
+    - {wyckoff_output}, {smc_output}, {vsa_output}, {delta_output}, {ict_output} - previous step outputs
+    """
+    market_data: MarketData = context.get("market_data")
+    instrument = context.get("instrument", "")
+    timeframe = context.get("timeframe", "")
+    previous_steps = context.get("previous_steps", {})
+    
+    # Build market data summary
+    market_data_summary = ""
+    if market_data:
+        # Determine number of candles based on step type
+        num_candles = 30  # default
+        if "wyckoff" in template.lower():
+            num_candles = 20
+        elif "smc" in template.lower() or "ict" in template.lower():
+            num_candles = 50
+        
+        candles_to_show = market_data.candles[-num_candles:] if len(market_data.candles) > num_candles else market_data.candles
+        for candle in candles_to_show:
+            market_data_summary += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: O={candle.open:.2f} H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f} V={candle.volume:.2f}\n"
+    
+    # Get previous step outputs
+    # For merge step, use full outputs; for other steps, truncate for context
+    is_merge_step = "объедини" in template.lower() or "merge" in template.lower() or "финальный пост" in template.lower()
+    
+    wyckoff_output = previous_steps.get("wyckoff", {}).get("output", "Не доступно")
+    if not is_merge_step and len(wyckoff_output) > 100:
+        wyckoff_output = wyckoff_output[:100] + "..."
+    
+    smc_output = previous_steps.get("smc", {}).get("output", "Не доступно")
+    if not is_merge_step and len(smc_output) > 100:
+        smc_output = smc_output[:100] + "..."
+    
+    vsa_output = previous_steps.get("vsa", {}).get("output", "Не доступно")
+    delta_output = previous_steps.get("delta", {}).get("output", "Не доступно")
+    ict_output = previous_steps.get("ict", {}).get("output", "Не доступно")
+    
+    # Format template with all variables
+    formatted = template.format(
+        instrument=instrument,
+        timeframe=timeframe,
+        market_data_summary=market_data_summary,
+        wyckoff_output=wyckoff_output,
+        smc_output=smc_output,
+        vsa_output=vsa_output,
+        delta_output=delta_output,
+        ict_output=ict_output,
+    )
+    
+    return formatted
 
 
 class BaseAnalyzer:
@@ -21,19 +80,46 @@ class BaseAnalyzer:
         self,
         context: Dict[str, Any],
         llm_client: LLMClient,
+        step_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Run the analysis step.
+        
+        Args:
+            context: Context dictionary with instrument, timeframe, market_data, previous_steps
+            llm_client: LLM client instance
+            step_config: Optional step configuration dict with model, temperature, max_tokens, 
+                        system_prompt, user_prompt_template
         
         Returns:
             Dict with 'input', 'output', 'model', 'tokens_used', 'cost_est'
         """
-        system_prompt = self.get_system_prompt()
-        user_prompt = self.build_user_prompt(context)
+        # Use step_config if provided, otherwise fall back to hardcoded methods
+        if step_config:
+            system_prompt = step_config.get("system_prompt") or self.get_system_prompt()
+            user_prompt_template = step_config.get("user_prompt_template")
+            if user_prompt_template:
+                user_prompt = format_user_prompt_template(user_prompt_template, context)
+            else:
+                user_prompt = self.build_user_prompt(context)
+            
+            model = step_config.get("model")
+            temperature = step_config.get("temperature", 0.7)
+            max_tokens = step_config.get("max_tokens")
+        else:
+            # Fall back to hardcoded prompts (backward compatibility)
+            system_prompt = self.get_system_prompt()
+            user_prompt = self.build_user_prompt(context)
+            model = None
+            temperature = 0.7
+            max_tokens = None
         
-        # Make LLM call
+        # Make LLM call with configuration
         result = llm_client.call(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
         
         return {

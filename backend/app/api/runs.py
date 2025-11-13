@@ -139,7 +139,7 @@ async def create_run(
             pipeline = AnalysisPipeline()
             
             # Pass custom_config if provided
-            custom_config = request.custom_config if hasattr(request, 'custom_config') else None
+            custom_config = request.custom_config if request.custom_config is not None else None
             
             # Run the pipeline
             pipeline.run(bg_run, bg_db, custom_config=custom_config)

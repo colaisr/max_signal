@@ -74,6 +74,14 @@ class AnalysisPipeline:
                 use_cache=True
             )
             
+            # Get configuration: use custom_config if provided, otherwise use analysis_type.config
+            config = custom_config
+            if not config and run.analysis_type:
+                config = run.analysis_type.config
+            
+            if not config:
+                raise ValueError("No configuration available for analysis run")
+            
             # Prepare context for all steps
             context = {
                 "instrument": run.instrument.symbol,
@@ -88,11 +96,20 @@ class AnalysisPipeline:
             for step_name, analyzer in self.steps:
                 logger.info("running_step", run_id=run.id, step=step_name)
                 
+                # Find step configuration
+                step_config = None
+                if config and "steps" in config:
+                    step_config = next(
+                        (s for s in config["steps"] if s.get("step_name") == step_name),
+                        None
+                    )
+                
                 try:
-                    # Run the step (sync call)
+                    # Run the step (sync call) with step configuration
                     step_result = analyzer.analyze(
                         context=context,
                         llm_client=self.llm_client,
+                        step_config=step_config,
                     )
                     
                     # Save step to database

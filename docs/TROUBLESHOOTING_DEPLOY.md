@@ -40,10 +40,12 @@ cd /srv/max-signal
 ./scripts/restart_frontend.sh
 ```
 
-**Option 2: Create Symlink**
+**Option 2: Use Script Directly from Repo**
 ```bash
-sudo rm /usr/local/bin/max-signal-deploy  # Remove old copy
-sudo ln -s /srv/max-signal/scripts/deploy.sh /usr/local/bin/max-signal-deploy
+cd /srv/max-signal
+./scripts/deploy.sh
+./scripts/restart_backend.sh
+./scripts/restart_frontend.sh
 ```
 
 ### Verification
@@ -84,10 +86,10 @@ cat /usr/local/bin/max-signal-deploy
 
 ### Best Practices
 
-1. **Always use scripts from git repo** - They're automatically updated when you pull
-2. **Use wrapper script** - If you need a global command, use the wrapper
-3. **Check script version** - Compare `/usr/local/bin/max-signal-deploy` with `/srv/max-signal/scripts/deploy.sh`
-4. **Run from project directory** - When possible, use `./scripts/deploy.sh` directly
+1. **Use standalone deploy script** - Install once with `install_standalone_deploy.sh`, then use `max-signal-deploy` from anywhere
+2. **Standalone script is independent** - It doesn't depend on repo files, so it works even if repo is moved
+3. **For manual control** - Use `./scripts/deploy.sh` + `restart_backend.sh` + `restart_frontend.sh` from project directory
+4. **Check health remotely** - Use `./scripts/check_production.sh` from your local machine
 
 ### Quick Fix for Current Issue
 
@@ -97,15 +99,17 @@ If `max-signal-deploy` is not working:
 # 1. SSH into production server
 ssh user@your-server
 
-# 2. Install wrapper (recommended)
+# 2. Install standalone deploy script (recommended)
 cd /srv/max-signal
-sudo ./scripts/install_deploy_wrapper.sh
+git pull origin main
+sudo ./scripts/install_standalone_deploy.sh
 
-# 3. Or use script directly
+# 3. Run deployment
+max-signal-deploy
+
+# Or use scripts directly from repo
 cd /srv/max-signal
 ./scripts/deploy.sh
-
-# 4. Restart services
 ./scripts/restart_backend.sh
 ./scripts/restart_frontend.sh
 ```

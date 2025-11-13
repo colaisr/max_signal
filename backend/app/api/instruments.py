@@ -350,14 +350,45 @@ def _get_all_equity_instruments() -> List[str]:
 
 
 @router.get("", response_model=List[InstrumentResponse])
-async def list_instruments(db: Session = Depends(get_db)):
+async def list_instruments(
+    analysis_type_id: int | None = None,
+    db: Session = Depends(get_db)
+):
     """List enabled instruments for use in dropdowns.
     
     Returns only instruments that are explicitly enabled (is_enabled=True) in the database.
     All instruments are disabled by default - admin must enable them in Settings.
+    
+    If analysis_type_id is provided, filters instruments based on analysis type:
+    - commodity_futures: MOEX exchange instruments
+    - crypto_analysis: crypto type instruments
+    - equity_analysis: equity type instruments (excluding MOEX futures)
+    - daystart: all instruments (no filter)
     """
+    from app.models.analysis_type import AnalysisType
+    
     # Get only enabled instruments from database
-    db_instruments = db.query(Instrument).filter(Instrument.is_enabled == True).all()
+    query = db.query(Instrument).filter(Instrument.is_enabled == True)
+    
+    # Filter by analysis type if provided
+    if analysis_type_id:
+        analysis_type = db.query(AnalysisType).filter(AnalysisType.id == analysis_type_id).first()
+        if analysis_type:
+            if analysis_type.name == "commodity_futures":
+                # MOEX commodity futures only
+                query = query.filter(Instrument.exchange == "MOEX")
+            elif analysis_type.name == "crypto_analysis":
+                # Crypto instruments only
+                query = query.filter(Instrument.type == "crypto")
+            elif analysis_type.name == "equity_analysis":
+                # Equity instruments, but exclude MOEX (those are for commodity_futures)
+                query = query.filter(
+                    Instrument.type == "equity",
+                    Instrument.exchange != "MOEX"
+                )
+            # daystart: no filter (show all)
+    
+    db_instruments = query.all()
     
     # Convert to response format
     result = []

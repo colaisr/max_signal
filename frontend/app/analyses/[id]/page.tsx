@@ -68,8 +68,11 @@ async function fetchEnabledDataSources() {
   return data
 }
 
-async function fetchInstruments() {
-  const { data } = await axios.get<Instrument[]>(`${API_BASE_URL}/api/instruments`)
+async function fetchInstruments(analysisTypeId?: number) {
+  const url = analysisTypeId 
+    ? `${API_BASE_URL}/api/instruments?analysis_type_id=${analysisTypeId}`
+    : `${API_BASE_URL}/api/instruments`
+  const { data } = await axios.get<Instrument[]>(url)
   return data
 }
 
@@ -123,8 +126,9 @@ export default function AnalysisDetailPage() {
   })
 
   const { data: instruments = [], isLoading: instrumentsLoading, error: instrumentsError } = useQuery({
-    queryKey: ['instruments'],
-    queryFn: fetchInstruments,
+    queryKey: ['instruments', analysisId],
+    queryFn: () => fetchInstruments(analysis?.id),
+    enabled: !!analysis,
   })
 
   const createRunMutation = useMutation({
@@ -497,7 +501,7 @@ export default function AnalysisDetailPage() {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div>
+            <div className="flex flex-col">
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                 Instrument
               </label>
@@ -518,6 +522,9 @@ export default function AnalysisDetailPage() {
                   ))
                 )}
               </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Показаны только инструменты, подходящие для данного типа анализа
+              </p>
               {instrumentsError && (
                 <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                   Failed to load instruments
@@ -525,7 +532,7 @@ export default function AnalysisDetailPage() {
               )}
             </div>
 
-            <div>
+            <div className="flex flex-col">
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                 Timeframe
               </label>
@@ -540,9 +547,13 @@ export default function AnalysisDetailPage() {
                 <option value="H1">1 Hour</option>
                 <option value="D1">1 Day</option>
               </select>
+              <div className="mt-1 h-5"></div>
             </div>
 
-            <div className="flex items-end">
+            <div className="flex flex-col">
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300 opacity-0">
+                Action
+              </label>
               <button
                 onClick={handleRunAnalysis}
                 disabled={!selectedInstrument || !selectedTimeframe || createRunMutation.isPending}

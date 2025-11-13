@@ -14,6 +14,13 @@ interface Instrument {
   exchange: string | null
 }
 
+interface AnalysisType {
+  id: number
+  name: string
+  display_name: string
+  description: string | null
+}
+
 interface Run {
   id: number
   trigger_type: string
@@ -25,8 +32,16 @@ interface Run {
   cost_est_total: number
 }
 
-async function fetchInstruments() {
-  const { data } = await axios.get<Instrument[]>(`${API_BASE_URL}/api/instruments`)
+async function fetchAnalysisTypes() {
+  const { data } = await axios.get<AnalysisType[]>(`${API_BASE_URL}/api/analyses`)
+  return data
+}
+
+async function fetchInstruments(analysisTypeId?: number) {
+  const url = analysisTypeId 
+    ? `${API_BASE_URL}/api/instruments?analysis_type_id=${analysisTypeId}`
+    : `${API_BASE_URL}/api/instruments`
+  const { data } = await axios.get<Instrument[]>(url)
   return data
 }
 
@@ -35,11 +50,15 @@ async function fetchRuns() {
   return data
 }
 
-async function createRun(instrument: string, timeframe: string) {
-  const { data } = await axios.post(`${API_BASE_URL}/api/runs`, {
+async function createRun(analysisTypeId: number | null, instrument: string, timeframe: string) {
+  const payload: any = {
     instrument,
     timeframe,
-  })
+  }
+  if (analysisTypeId) {
+    payload.analysis_type_id = analysisTypeId
+  }
+  const { data } = await axios.post(`${API_BASE_URL}/api/runs`, payload)
   return data
 }
 
@@ -48,12 +67,19 @@ export default function DashboardPage() {
   const queryClient = useQueryClient()
   const { isLoading: authLoading } = useRequireAuth()
   
+  const [selectedAnalysisType, setSelectedAnalysisType] = useState<number | null>(null)
   const [selectedInstrument, setSelectedInstrument] = useState<string>('')
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('H1')
 
+  const { data: analysisTypes = [], isLoading: analysisTypesLoading } = useQuery({
+    queryKey: ['analysis-types'],
+    queryFn: fetchAnalysisTypes,
+  })
+
   const { data: instruments = [], isLoading: instrumentsLoading, error: instrumentsError } = useQuery({
-    queryKey: ['instruments'],
-    queryFn: fetchInstruments,
+    queryKey: ['instruments', selectedAnalysisType],
+    queryFn: () => fetchInstruments(selectedAnalysisType || undefined),
+    enabled: true,
   })
 
   const { data: runs = [], isLoading: runsLoading } = useQuery({
@@ -63,8 +89,8 @@ export default function DashboardPage() {
   })
 
   const createRunMutation = useMutation({
-    mutationFn: ({ instrument, timeframe }: { instrument: string; timeframe: string }) =>
-      createRun(instrument, timeframe),
+    mutationFn: ({ analysisTypeId, instrument, timeframe }: { analysisTypeId: number | null; instrument: string; timeframe: string }) =>
+      createRun(analysisTypeId, instrument, timeframe),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['runs'] })
       router.push(`/runs/${data.id}`)
@@ -73,13 +99,25 @@ export default function DashboardPage() {
 
   const handleRunAnalysis = () => {
     if (!selectedInstrument) {
-      alert('Please select an instrument')
+      alert('Пожалуйста, выберите инструмент')
+      return
+    }
+    if (!selectedAnalysisType) {
+      alert('Пожалуйста, выберите тип анализа')
       return
     }
     createRunMutation.mutate({
+      analysisTypeId: selectedAnalysisType,
       instrument: selectedInstrument,
       timeframe: selectedTimeframe,
     })
+  }
+
+  // Reset instrument when analysis type changes
+  const handleAnalysisTypeChange = (analysisTypeId: string) => {
+    const id = analysisTypeId ? parseInt(analysisTypeId) : null
+    setSelectedAnalysisType(id)
+    setSelectedInstrument('') // Reset instrument selection
   }
 
   const timeframes = [
@@ -126,20 +164,45 @@ export default function DashboardPage() {
             Run Analysis
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <div className="flex flex-col">
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                Instrument
+                Тип анализа
+              </label>
+              <select
+                value={selectedAnalysisType || ''}
+                onChange={(e) => handleAnalysisTypeChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                disabled={analysisTypesLoading}
+              >
+                <option value="">Выберите тип анализа...</option>
+                {analysisTypesLoading ? (
+                  <option disabled>Загрузка...</option>
+                ) : (
+                  analysisTypes.map((at) => (
+                    <option key={at.id} value={at.id}>
+                      {at.display_name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <div className="flex flex-col">
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                Инструмент
               </label>
               <select
                 value={selectedInstrument}
                 onChange={(e) => setSelectedInstrument(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                disabled={instrumentsLoading}
+                disabled={instrumentsLoading || !selectedAnalysisType}
               >
-                <option value="">Select instrument...</option>
-                {instrumentsLoading ? (
-                  <option disabled>Loading instruments...</option>
+                <option value="">Выберите инструмент...</option>
+                {!selectedAnalysisType ? (
+                  <option disabled>Сначала выберите тип анализа</option>
+                ) : instrumentsLoading ? (
+                  <option disabled>Загрузка инструментов...</option>
                 ) : (
                   instruments.map((inst) => (
                     <option key={inst.symbol} value={inst.symbol}>
@@ -148,16 +211,21 @@ export default function DashboardPage() {
                   ))
                 )}
               </select>
+              {selectedAnalysisType && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Показаны только инструменты, подходящие для данного типа анализа
+                </p>
+              )}
               {instrumentsError && (
                 <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                  Failed to load instruments
+                  Ошибка загрузки инструментов
                 </p>
               )}
             </div>
 
-            <div>
+            <div className="flex flex-col">
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                Timeframe
+                Таймфрейм
               </label>
               <select
                 value={selectedTimeframe}
@@ -170,15 +238,19 @@ export default function DashboardPage() {
                   </option>
                 ))}
               </select>
+              <div className="mt-1 h-5"></div>
             </div>
 
-            <div className="flex items-end">
+            <div className="flex flex-col">
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300 opacity-0">
+                Действие
+              </label>
               <button
                 onClick={handleRunAnalysis}
-                disabled={!selectedInstrument || createRunMutation.isPending}
+                disabled={!selectedAnalysisType || !selectedInstrument || createRunMutation.isPending}
                 className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md font-medium transition-colors"
               >
-                {createRunMutation.isPending ? 'Creating...' : 'Run Analysis'}
+                {createRunMutation.isPending ? 'Создание...' : 'Запустить анализ'}
               </button>
             </div>
           </div>

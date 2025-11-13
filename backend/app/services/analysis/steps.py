@@ -13,7 +13,7 @@ def format_user_prompt_template(template: str, context: Dict[str, Any]) -> str:
     - {instrument} - instrument symbol
     - {timeframe} - timeframe
     - {market_data_summary} - formatted market data summary
-    - {wyckoff_output}, {smc_output}, {vsa_output}, {delta_output}, {ict_output} - previous step outputs
+    - {wyckoff_output}, {smc_output}, {vsa_output}, {delta_output}, {ict_output}, {price_action_output} - previous step outputs
     """
     market_data: MarketData = context.get("market_data")
     instrument = context.get("instrument", "")
@@ -49,6 +49,9 @@ def format_user_prompt_template(template: str, context: Dict[str, Any]) -> str:
     vsa_output = previous_steps.get("vsa", {}).get("output", "Не доступно")
     delta_output = previous_steps.get("delta", {}).get("output", "Не доступно")
     ict_output = previous_steps.get("ict", {}).get("output", "Не доступно")
+    price_action_output = previous_steps.get("price_action", {}).get("output", "Не доступно")
+    if not is_merge_step and len(price_action_output) > 100:
+        price_action_output = price_action_output[:100] + "..."
     
     # Format template with all variables
     formatted = template.format(
@@ -60,6 +63,7 @@ def format_user_prompt_template(template: str, context: Dict[str, Any]) -> str:
         vsa_output=vsa_output,
         delta_output=delta_output,
         ict_output=ict_output,
+        price_action_output=price_action_output,
     )
     
     return formatted
@@ -314,6 +318,44 @@ Identify:
 
 Provide ICT-based entry strategy."""
         
+        return prompt
+
+
+class PriceActionAnalyzer(BaseAnalyzer):
+    """Price Action and Pattern Analysis step."""
+    
+    def get_system_prompt(self) -> str:
+        return """You are an expert in Price Action and Pattern Analysis. Analyze candlestick patterns, 
+        chart formations, and price movements to identify trading opportunities. Focus on patterns like 
+        flags, triangles, head and shoulders, and candlestick formations. Provide specific entry, stop, 
+        and target levels based on pattern completion."""
+    
+    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+        market_data: MarketData = context["market_data"]
+        instrument = context["instrument"]
+        timeframe = context["timeframe"]
+        
+        prompt = f"""Analyze {instrument} on {timeframe} using Price Action and Pattern Analysis.
+
+Price action (last 50 candles):
+"""
+        for candle in market_data.candles[-50:]:
+            body = abs(candle.close - candle.open)
+            is_bullish = candle.close > candle.open
+            upper_wick = candle.high - max(candle.open, candle.close)
+            lower_wick = min(candle.open, candle.close) - candle.low
+            prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: {'🟢' if is_bullish else '🔴'} Body={body:.2f} UpperWick={upper_wick:.2f} LowerWick={lower_wick:.2f} Close={candle.close:.2f}\n"
+        
+        prompt += """
+Identify:
+1. Chart patterns forming (flags, triangles, head and shoulders, double tops/bottoms, etc.)
+2. Candlestick patterns (doji, engulfing, pin bars, hammers, shooting stars)
+3. Support and resistance levels from price action
+4. Pattern completion signals and entry points
+5. Stop loss and target levels based on pattern structure
+
+Provide specific price levels for entries, stops, and targets."""
+
         return prompt
 
 

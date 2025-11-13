@@ -15,6 +15,7 @@ from app.services.analysis.steps import (
     VSAAnalyzer,
     DeltaAnalyzer,
     ICTAnalyzer,
+    PriceActionAnalyzer,
     MergeAnalyzer,
 )
 import logging
@@ -34,6 +35,7 @@ class AnalysisPipeline:
             ("vsa", VSAAnalyzer()),
             ("delta", DeltaAnalyzer()),
             ("ict", ICTAnalyzer()),
+            ("price_action", PriceActionAnalyzer()),
             ("merge", MergeAnalyzer()),
         ]
     

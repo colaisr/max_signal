@@ -69,7 +69,7 @@ class AnalysisPipeline:
             db.commit()
             
             # Fetch market data
-            logger.info("fetching_market_data", run_id=run.id, instrument=run.instrument.symbol)
+            logger.info(f"fetching_market_data: run_id={run.id}, instrument={run.instrument.symbol}")
             market_data = self.data_service.fetch_market_data(
                 instrument=run.instrument.symbol,
                 timeframe=run.timeframe,
@@ -96,7 +96,7 @@ class AnalysisPipeline:
             
             # Run each analysis step
             for step_name, analyzer in self.steps:
-                logger.info("running_step", run_id=run.id, step=step_name)
+                logger.info(f"running_step: run_id={run.id}, step={step_name}")
                 
                 # Find step configuration
                 step_config = None
@@ -133,14 +133,11 @@ class AnalysisPipeline:
                     total_cost += step_result.get("cost_est", 0.0)
                     
                     logger.info(
-                        "step_completed",
-                        run_id=run.id,
-                        step=step_name,
-                        tokens=step_result.get("tokens_used", 0),
-                        cost=step_result.get("cost_est", 0.0),
+                        f"step_completed: run_id={run.id}, step={step_name}, "
+                        f"tokens={step_result.get('tokens_used', 0)}, cost={step_result.get('cost_est', 0.0)}"
                     )
                 except Exception as e:
-                    logger.error("step_failed", run_id=run.id, step=step_name, error=str(e))
+                    logger.error(f"step_failed: run_id={run.id}, step={step_name}, error={str(e)}")
                     # Save error step
                     error_step = AnalysisStep(
                         run_id=run.id,
@@ -159,11 +156,11 @@ class AnalysisPipeline:
             run.cost_est_total = total_cost
             db.commit()
             
-            logger.info("pipeline_completed", run_id=run.id, total_cost=total_cost)
+            logger.info(f"pipeline_completed: run_id={run.id}, total_cost={total_cost}")
             return run
             
         except Exception as e:
-            logger.error("pipeline_failed", run_id=run.id, error=str(e))
+            logger.error(f"pipeline_failed: run_id={run.id}, error={str(e)}")
             run.status = RunStatus.FAILED
             run.finished_at = datetime.now(timezone.utc)
             db.commit()

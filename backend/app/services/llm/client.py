@@ -105,10 +105,7 @@ class LLMClient:
             cost_est = (tokens_used / 1000) * 0.01
             
             logger.info(
-                "llm_call_completed",
-                model=model,
-                tokens=tokens_used,
-                cost_est=cost_est,
+                f"llm_call_completed: model={model}, tokens={tokens_used}, cost_est={cost_est}"
             )
             
             return {
@@ -119,7 +116,12 @@ class LLMClient:
             }
         except Exception as e:
             error_msg = str(e)
-            logger.error("llm_call_failed", model=model, error=error_msg)
+            error_type = type(e).__name__
+            
+            # Log detailed error information
+            logger.error(
+                f"llm_call_failed: model={repr(model)}, error_type={error_type}, error={error_msg}"
+            )
             
             # Check if it's an authentication error (invalid API key)
             if "401" in error_msg or "unauthorized" in error_msg.lower() or "invalid" in error_msg.lower():
@@ -128,7 +130,19 @@ class LLMClient:
                     f"Please update it in Settings → OpenRouter Configuration. Error: {error_msg}"
                 )
             
-            raise ValueError(f"LLM call failed: {error_msg}")
+            # Check if it's a model not found error
+            if "404" in error_msg or "not found" in error_msg.lower() or "model" in error_msg.lower() and "invalid" in error_msg.lower():
+                raise ValueError(
+                    f"Model '{model}' not found or invalid. "
+                    f"Please check the model name in your analysis configuration. "
+                    f"Error: {error_msg}"
+                )
+            
+            # Generic error with model name
+            raise ValueError(
+                f"LLM call failed for model '{model}': {error_msg} "
+                f"(Error type: {error_type})"
+            )
 
 
 def fetch_available_models_from_openrouter(

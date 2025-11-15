@@ -2,13 +2,14 @@
 
 ### 1) Purpose and Scope
 
-- **Goal**: Build an MVP system that analyzes markets from multiple sources and produces actionable trading posts in Telegram style, with intrastep transparency for prompt control and tuning. Later add backtesting to replay the same analysis on historical data.
+- **Goal**: Build an MVP system that analyzes markets from multiple sources and produces actionable trading posts in Telegram style, with intrastep transparency for prompt control and tuning. Supports multiple analysis types optimized for different asset classes (commodity futures, crypto, equities). Later add backtesting to replay the same analysis on historical data.
 - **Early usage**: Few users; focus on logic quality, prompt control, and result observability.
 - **Triggering**: Manual at first; scheduled (daily; later hourly/1m/5m) after.
 - **Outputs**: 
   - UI to trigger and view runs with all intrastep data.
   - Telegram direct messages to all users who started the bot with the final merged analysis.
 - **AI approach**: Heavy usage of LLM agents/tools; LLM provider switchable via OpenAI-compatible API using OpenRouter for simplicity and cost/uptime benefits (`https://openrouter.ai/`).
+- **Language**: All analysis outputs and UI in Russian.
 
 Constraints and preferences:
 - Monorepo structure (backend and frontend in same repository).
@@ -58,8 +59,9 @@ Constraints and preferences:
 
 - Data model (MySQL)
   - `instruments`: id, symbol, type, exchange (NYMEX/CME/NASDAQ/NYSE/MOEX/binance), figi (Tinkoff FIGI for MOEX instruments), is_enabled (admin toggle for dropdown visibility)
-  - `analysis_runs`: id, trigger_type (manual/scheduled), instrument_id, timeframe, status (queued/running/succeeded/failed), created_at, finished_at, cost_est_total
-  - `analysis_steps`: id, run_id, step_name (wyckoff/smc/vsa/delta/ict/merge), input_blob, output_blob, llm_model, tokens, cost_est, created_at
+  - `analysis_types`: id, name, display_name, description, version, config (JSON with steps configuration), is_active, created_at, updated_at
+  - `analysis_runs`: id, trigger_type (manual/scheduled), instrument_id, analysis_type_id (links to analysis_types), timeframe, status (queued/running/succeeded/failed), created_at, finished_at, cost_est_total
+  - `analysis_steps`: id, run_id, step_name (wyckoff/smc/vsa/delta/ict/price_action/merge), input_blob, output_blob, llm_model, tokens, cost_est, created_at
 - `telegram_posts`: id, run_id, message_text, status (pending/sent/failed), message_id, sent_at
 - `telegram_users`: id, chat_id, username, first_name, last_name, is_active, started_at, last_message_at, created_at, updated_at
 - `data_cache`: id, key, payload, fetched_at, ttl_seconds
@@ -72,14 +74,17 @@ Constraints and preferences:
   - Scheduler: APScheduler triggers daystart (daily), extend to intervals later
 
 - API (FastAPI)
-  - `POST /runs` → manual trigger (instrument, timeframe, options) → `run_id`
+  - `POST /runs` → manual trigger (instrument, timeframe, analysis_type_id, custom_config) → `run_id`
   - `GET /runs/{id}` → run status + intrastep outputs
   - `POST /runs/{id}/publish` → send to Telegram
-  - `GET /instruments` → list available instruments
+  - `GET /instruments?analysis_type_id={id}` → list available instruments (filtered by analysis type)
+  - `GET /analyses` → list all analysis types
+  - `GET /analyses/{id}` → get analysis type details
   - `GET /health` → health probe
 
 - Frontend (Next.js)
-  - Dashboard: form to trigger Daystart; shows latest runs table
+  - Dashboard: form to trigger analysis (analysis type selector, instrument selector filtered by type, timeframe); shows latest runs table
+  - Analyses page: list all analysis types with descriptions; detail page with pipeline visualization
   - Run detail: timeline of steps with prompts/outputs; final post preview; "Publish to Telegram"
   - Settings: model choice, Telegram bot token, active users count, schedule time (saved to backend config endpoint or stored locally on server)
 
@@ -107,7 +112,7 @@ Constraints and preferences:
 
 **Analyses Page (`/analyses`):**
 - **List View**: Card grid showing:
-  - Analysis name and description
+  - Analysis name and description (in Russian)
   - Number of steps
   - Estimated cost range
   - Last run timestamp
@@ -118,11 +123,25 @@ Constraints and preferences:
   - **Pipeline Visualization**: Shows all steps with:
     - Step name and order
     - LLM model (dropdown to change)
-    - System prompt (view/edit)
-    - User prompt template (with variables: `{instrument}`, `{timeframe}`, `{market_data}`)
+    - System prompt (view/edit) - all in Russian
+    - User prompt template (with variables: `{instrument}`, `{timeframe}`, `{market_data}`) - all in Russian
     - Data source/tools used
     - Temperature, max tokens
+  - **Instrument Selection**: Automatically filtered by analysis type:
+    - Commodity Futures → only MOEX instruments
+    - Crypto Analysis → only crypto pairs
+    - Equity Analysis → only equity instruments (excluding MOEX)
+    - Daystart → all instruments
+  - Hint text: "Показаны только инструменты, подходящие для данного типа анализа"
   - Actions: "Run Analysis" (with instrument/timeframe selector), "Save Configuration"
+
+**Dashboard (`/dashboard`):**
+- **Analysis Type Selector**: First field - select which analysis type to run (required)
+- **Instrument Selector**: Filtered based on selected analysis type (disabled until analysis type selected)
+- **Timeframe Selector**: Standard timeframes (M1, M5, M15, H1, D1)
+- **Run Analysis Button**: Enabled only when analysis type and instrument are selected
+- **Hint Text**: "Показаны только инструменты, подходящие для данного типа анализа" (shown when analysis type selected)
+- **Recent Runs Table**: Shows latest analysis runs with status, cost, and links to details
 
 **Runs Page (`/runs`):**
 - Dashboard view with filters (analysis type, status, instrument, date range)
@@ -166,9 +185,38 @@ Constraints and preferences:
 - Expandable sections for prompts/outputs
 - Copy-to-clipboard functionality
 - Real-time updates while pipeline runs (polling every 2s)
+- All UI text in Russian
+- Instrument filtering hints ("Показаны только инструменты, подходящие для данного типа анализа")
 
 
-### 4) Daystart Analysis Pipeline (MVP Feature)
+### 4) Analysis Types and Pipelines
+
+The system supports multiple analysis types, each optimized for specific asset classes:
+
+**Available Analysis Types:**
+1. **Дневной анализ (Daystart Analysis)** - General-purpose analysis for any instrument
+2. **Анализ товарных фьючерсов (Commodity Futures Analysis)** - MOEX commodity futures focused
+3. **Анализ криптовалют (Crypto Analysis)** - Cryptocurrency markets (24/7, high volatility)
+4. **Анализ акций (Equity Analysis)** - Stock markets with fundamental context
+
+**Common Pipeline Structure:**
+All analysis types use the same 6-7 step pipeline:
+1. Wyckoff - Market phase identification
+2. SMC - Structure and liquidity analysis
+3. VSA - Volume spread analysis
+4. Delta - Buying/selling pressure
+5. ICT - Liquidity manipulation and entry zones
+6. Price Action/Patterns - Chart patterns and candlestick formations (for commodity/crypto/equity)
+7. Merge - Combine all analyses into final Telegram post
+
+**Instrument Filtering:**
+- Each analysis type automatically filters available instruments:
+  - Commodity Futures → MOEX exchange only
+  - Crypto Analysis → crypto type only
+  - Equity Analysis → equity type, excluding MOEX
+  - Daystart → all instruments
+
+### 4a) Daystart Analysis Pipeline (Original MVP Feature)
 
 - Inputs
   - `instrument` (e.g., `BTC/USDT`, `AAPL`), `timeframe` (e.g., M15/H1), `session_day`
@@ -181,6 +229,43 @@ Constraints and preferences:
   4) Delta — dominance, anomalous delta, absorption, divergence
   5) ICT — liquidity manipulation, PD arrays, FVG/OB return zones, optimal entries
   6) Merge — unify into a Telegram-ready post following the exact style below
+
+### 4b) Commodity Futures Analysis Pipeline
+
+- **Purpose**: Professional analysis of MOEX commodity futures (NG1!, BR1!, GD1!, IRUS.P, etc.)
+- **Language**: Russian (all prompts and outputs)
+- **Focus**: Live entry points right now + short-term strategy (2-6 hours, 24 hours)
+- **Output Format**: Two specific trades with entry/stop/target levels
+- **Steps**: Wyckoff, SMC, VSA, Delta, ICT, Price Action, Merge
+- **Key Features**:
+  - MOEX price focus with spot vs futures comparison
+  - Natural Russian language ("как человек у терминала")
+  - Telegram format with emojis (💎 СИТУАЦИЯ, 📈 СЦЕНАРИЙ, 🚀 СДЕЛКА #1, etc.)
+  - Two trades: Trade #1 (right now, 2-6 hours), Trade #2 (today-tomorrow, 24 hours)
+
+### 4c) Crypto Analysis Pipeline
+
+- **Purpose**: Cryptocurrency market analysis (BTC/USDT, ETH/USDT, etc.)
+- **Language**: Russian
+- **Focus**: High-probability crypto setups, 24/7 markets, volatility, exchange flows
+- **Steps**: Wyckoff, SMC, VSA, Delta, ICT, Price Action, Merge
+- **Key Features**:
+  - Whale movement analysis
+  - Exchange-specific liquidity zones
+  - High-frequency opportunities (2-6 hours, 4-12 hours)
+  - Natural Russian language, crypto-focused terminology
+
+### 4d) Equity Analysis Pipeline
+
+- **Purpose**: Stock market analysis (AAPL, MSFT, etc.)
+- **Language**: Russian
+- **Focus**: High-probability stock setups with fundamental context
+- **Steps**: Wyckoff, SMC, VSA, Delta, ICT, Price Action, Merge
+- **Key Features**:
+  - Fundamental context (earnings, sector trends, market conditions)
+  - Institutional activity analysis
+  - Intraday + swing setups (1-3 days)
+  - Natural Russian language, equity-focused terminology
 
 - Telegram style and template (final merge step must honor):
 
@@ -528,7 +613,8 @@ Constraints and preferences:
 - [x] Telegram Integration ✅ (Completed: Backend publish endpoint, message splitting, Settings page, credentials from AppSettings, TelegramUser model, bot handler for /start/help/status commands, automatic user registration, direct messaging to users, error handling for partial failures)
 - [x] Settings Page Enhancements ✅ (Completed: Model syncing from OpenRouter API, search and filter functionality for models, scrollable model list, enabled/free filters, provider filter dropdown)
 - [x] Futures Contracts Support ✅ (Completed: Bloomberg-style ticker support (NG1, B1!, etc.), MOEX futures fetching (NGX5, 400+ contracts), exchange detection (NYMEX/CME/MOEX), automatic ticker mapping)
-- [ ] Refactor pipeline to use analysis_type configuration (accepts custom_config, needs full implementation)
+- [x] Multiple Analysis Types ✅ (Completed: Created commodity_futures, crypto_analysis, equity_analysis analysis types with Russian prompts, PriceActionAnalyzer step, instrument filtering by analysis type, dashboard analysis type selector)
+- [x] Analysis Type System ✅ (Completed: Pipeline uses analysis_type configuration, supports custom_config override, all prompts in Russian, migrated to Alembic migrations)
 - [ ] Scheduling
 - [x] Deployment (single VM) ✅ (Scripts and documentation ready - see `docs/PRODUCTION_DEPLOYMENT.md`)
 - [ ] Backtesting (Phase 2)

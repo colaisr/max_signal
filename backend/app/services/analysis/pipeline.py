@@ -159,34 +159,48 @@ class AnalysisPipeline:
                             "error": error_msg,
                             "error_type": error_type
                         })
+                        
+                        # Save error step
+                        error_step = AnalysisStep(
+                            run_id=run.id,
+                            step_name=step_name,
+                            input_blob={"error": error_msg, "error_type": error_type, "is_model_error": True},
+                            output_blob=f"Error: {error_msg}",
+                        )
+                        db.add(error_step)
+                        
+                        # Store failure details in a special step for easy retrieval
+                        failure_step = AnalysisStep(
+                            run_id=run.id,
+                            step_name="model_failures",
+                            input_blob={"failures": model_failures},
+                            output_blob=f"Model failures detected: {len(model_failures)} step(s) failed due to model errors",
+                        )
+                        db.add(failure_step)
+                        
+                        # Stop execution immediately on model error
+                        run.status = RunStatus.MODEL_FAILURE
+                        run.finished_at = datetime.now(timezone.utc)
+                        run.cost_est_total = total_cost
+                        db.commit()
+                        
+                        logger.error(f"pipeline_stopped_due_to_model_error: run_id={run.id}, step={step_name}, model={model_name}")
+                        return run
                     
-                    # Save error step
+                    # For non-model errors, save error step and continue
                     error_step = AnalysisStep(
                         run_id=run.id,
                         step_name=step_name,
-                        input_blob={"error": error_msg, "error_type": error_type, "is_model_error": is_model_error},
+                        input_blob={"error": error_msg, "error_type": error_type, "is_model_error": False},
                         output_blob=f"Error: {error_msg}",
                     )
                     db.add(error_step)
                     db.commit()
-                    # Continue with next step instead of failing completely
+                    # Continue with next step for non-model errors
                     continue
             
-            # Determine final status based on failures
-            if model_failures:
-                # Set status to MODEL_FAILURE if we have model errors but pipeline completed
-                run.status = RunStatus.MODEL_FAILURE
-                # Store failure details in a special step for easy retrieval
-                failure_step = AnalysisStep(
-                    run_id=run.id,
-                    step_name="model_failures",
-                    input_blob={"failures": model_failures},
-                    output_blob=f"Model failures detected: {len(model_failures)} step(s) failed due to model errors",
-                )
-                db.add(failure_step)
-            else:
-                run.status = RunStatus.SUCCEEDED
-            
+            # All steps completed successfully
+            run.status = RunStatus.SUCCEEDED
             run.finished_at = datetime.now(timezone.utc)
             run.cost_est_total = total_cost
             db.commit()

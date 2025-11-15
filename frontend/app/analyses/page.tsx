@@ -90,7 +90,7 @@ export default function AnalysesPage() {
             {analysisTypes.map((analysis) => (
               <div
                 key={analysis.id}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition-shadow p-6"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition-shadow p-6 flex flex-col"
               >
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -109,7 +109,7 @@ export default function AnalysesPage() {
                   </p>
                 )}
 
-                <div className="space-y-2 mb-4">
+                <div className="space-y-2 mb-4 flex-grow">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500 dark:text-gray-400">Steps:</span>
                     <span className="text-gray-900 dark:text-white font-medium">
@@ -136,7 +136,7 @@ export default function AnalysesPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-2 mt-4">
+                <div className="flex gap-2 mt-auto">
                   <Link
                     href={`/analyses/${analysis.id}`}
                     className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium text-center transition-colors"

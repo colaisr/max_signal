@@ -40,6 +40,7 @@ interface StepConfig {
   temperature: number
   max_tokens: number
   data_sources: string[]
+  num_candles?: number
 }
 
 interface AnalysisType {
@@ -468,6 +469,27 @@ export default function AnalysisDetailPage() {
                                   </span>
                                 )}
                               </div>
+                              {/* Show num_candles only for steps that use candles (not merge) */}
+                              {step.step_name !== 'merge' && (
+                                <div>
+                                  <label className="text-gray-500 dark:text-gray-400">Number of Candles:</label>
+                                  {isEditing ? (
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="500"
+                                      value={step.num_candles || (step.step_name === 'wyckoff' ? 20 : step.step_name === 'smc' || step.step_name === 'ict' || step.step_name === 'price_action' ? 50 : 30)}
+                                      onChange={(e) => updateStepConfig(index, 'num_candles', parseInt(e.target.value))}
+                                      className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                      placeholder="Number of candles to analyze"
+                                    />
+                                  ) : (
+                                    <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                                      {step.num_candles || (step.step_name === 'wyckoff' ? 20 : step.step_name === 'smc' || step.step_name === 'ict' || step.step_name === 'price_action' ? 50 : 30)}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                               <div>
                                 <label className="text-gray-500 dark:text-gray-400">Data Source:</label>
                                 {isEditing ? (

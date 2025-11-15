@@ -59,7 +59,7 @@ Constraints and preferences:
 
 - Data model (MySQL)
   - `instruments`: id, symbol, type, exchange (NYMEX/CME/NASDAQ/NYSE/MOEX/binance), figi (Tinkoff FIGI for MOEX instruments), is_enabled (admin toggle for dropdown visibility)
-  - `analysis_types`: id, name, display_name, description, version, config (JSON with steps configuration), is_active, created_at, updated_at
+  - `analysis_types`: id, name, display_name, description, version, config (JSON with steps configuration including `num_candles` field), is_active, created_at, updated_at
   - `analysis_runs`: id, trigger_type (manual/scheduled), instrument_id, analysis_type_id (links to analysis_types), timeframe, status (queued/running/succeeded/failed/model_failure), created_at, finished_at, cost_est_total
   - `analysis_steps`: id, run_id, step_name (wyckoff/smc/vsa/delta/ict/price_action/merge/model_failures), input_blob, output_blob, llm_model, tokens, cost_est, created_at
   - `available_models`: id, name, display_name, provider, description, max_tokens, cost_per_1k_tokens, is_enabled, has_failures (marks models with recorded failures - rate limits, not found, etc.), created_at, updated_at
@@ -70,7 +70,10 @@ Constraints and preferences:
 - Core services
   - Data adapters: normalized OHLCV fetch; light feature extraction (structure hints, volume stats if available)
     - All adapters sort candles by timestamp (oldest → newest) before returning to ensure "last N candles" are always the most recent by time
-    - Number of candles per analysis step: Wyckoff (20), SMC/ICT (50), VSA/Delta (30), default (30)
+    - **Configurable candle counts**: Number of candles per step is configurable via `num_candles` field in step config
+      - Default values: Wyckoff (20), SMC/ICT/PriceAction (50), VSA/Delta (30)
+      - Users can customize candle counts before running analysis or set defaults in Settings
+      - Prompt text dynamically updates to reflect configured number (e.g., "last 10 candles" instead of "last 20 candles")
   - Agent orchestrator: runs intrasteps (Wyckoff, SMC, VSA, Delta, ICT) using stable prompts and tool schemas; then merges into final Telegram post
     - Model failure detection: automatically detects model errors (429 rate limits, 404 not found, invalid model)
     - Failure marking: marks failed models with `has_failures=True` in database
@@ -197,6 +200,7 @@ Constraints and preferences:
       - Editable fields per step:
         - Model selection (with failure indicators)
         - Temperature and max tokens
+        - Number of candles (for steps that use candles, not merge step)
         - System prompt (textarea)
         - User prompt template (textarea with variable hints)
       - Reset button (reverts to saved config)
@@ -422,7 +426,11 @@ All analysis types use the same 6-7 step pipeline:
   - Ensures "last N candles" operations always return the most recent candles by time
   - Works regardless of API response order
   - Analysis steps also sort candles as a safety measure before slicing
-  - Number of candles per step: Wyckoff (20), SMC/ICT (50), VSA/Delta (30), default (30)
+- **Configurable Candle Counts**: Number of candles per step is user-configurable via `num_candles` field in step configuration
+  - Default values: Wyckoff (20), SMC/ICT/PriceAction (50), VSA/Delta (30)
+  - Editable in analysis detail page (before run) and Settings → Analysis Types Configuration (defaults)
+  - Prompt text automatically updates to match configured number (e.g., "last 10 candles" instead of "last 20 candles")
+  - Migration added default `num_candles` values to all existing analysis types
 
 
 ### 7) Scheduling
@@ -667,7 +675,8 @@ All analysis types use the same 6-7 step pipeline:
 - [x] Multiple Analysis Types ✅ (Completed: Created commodity_futures, crypto_analysis, equity_analysis analysis types with Russian prompts, PriceActionAnalyzer step, instrument filtering by analysis type, dashboard analysis type selector)
 - [x] Analysis Type System ✅ (Completed: Pipeline uses analysis_type configuration, supports custom_config override, all prompts in Russian, migrated to Alembic migrations)
 - [x] Model Failure Tracking ✅ (Completed: `has_failures` field added to `available_models` table, automatic marking when model errors occur, visual indicators in dropdowns and settings page, custom Select component for cross-platform support, sync logic preserves failure status, `model_failure` run status with tooltips)
-- [x] Analysis Types Configuration Editing ✅ (Completed: Settings page section listing all analysis types, edit page at `/settings/analyses/{id}` for editing default configurations, API endpoint `PUT /api/analyses/{id}/config`, editable step configurations (models, prompts, temperature, max_tokens), default timeframe and instrument editing, reset and save functionality)
+- [x] Analysis Types Configuration Editing ✅ (Completed: Settings page section listing all analysis types, edit page at `/settings/analyses/{id}` for editing default configurations, API endpoint `PUT /api/analyses/{id}/config`, editable step configurations (models, prompts, temperature, max_tokens, num_candles), default timeframe and instrument editing, reset and save functionality)
+- [x] Configurable Candle Counts ✅ (Completed: Added `num_candles` field to step config, editable in analysis detail page and Settings, prompt text dynamically updates to match configured number, migration added default values to all existing analysis types, backward compatible with defaults)
 - [ ] Scheduling
 - [x] Deployment (single VM) ✅ (Scripts and documentation ready - see `docs/PRODUCTION_DEPLOYMENT.md`)
 - [ ] Backtesting (Phase 2)

@@ -6,7 +6,7 @@ from app.services.llm.client import LLMClient
 from app.services.data.normalized import MarketData
 
 
-def format_user_prompt_template(template: str, context: Dict[str, Any]) -> str:
+def format_user_prompt_template(template: str, context: Dict[str, Any], step_config: Optional[Dict[str, Any]] = None) -> str:
     """Format user prompt template with context variables.
     
     Supports placeholders:
@@ -14,22 +14,32 @@ def format_user_prompt_template(template: str, context: Dict[str, Any]) -> str:
     - {timeframe} - timeframe
     - {market_data_summary} - formatted market data summary
     - {wyckoff_output}, {smc_output}, {vsa_output}, {delta_output}, {ict_output}, {price_action_output} - previous step outputs
+    
+    Args:
+        template: User prompt template string
+        context: Context dictionary with market_data, instrument, timeframe, previous_steps
+        step_config: Optional step configuration dict (may contain num_candles)
     """
     market_data: MarketData = context.get("market_data")
     instrument = context.get("instrument", "")
     timeframe = context.get("timeframe", "")
     previous_steps = context.get("previous_steps", {})
     
-    # Build market data summary
-    market_data_summary = ""
-    if market_data:
-        # Determine number of candles based on step type
+    # Get number of candles from step_config if available, otherwise use defaults based on step type
+    num_candles = None
+    if step_config and "num_candles" in step_config and step_config["num_candles"] is not None:
+        num_candles = step_config["num_candles"]
+    else:
+        # Default based on step type (backward compatibility)
         num_candles = 30  # default
         if "wyckoff" in template.lower():
             num_candles = 20
         elif "smc" in template.lower() or "ict" in template.lower():
             num_candles = 50
-        
+    
+    # Build market data summary
+    market_data_summary = ""
+    if market_data:
         # Ensure candles are sorted by timestamp (oldest first) before taking last N
         sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         candles_to_show = sorted_candles[-num_candles:] if len(sorted_candles) > num_candles else sorted_candles
@@ -55,6 +65,25 @@ def format_user_prompt_template(template: str, context: Dict[str, Any]) -> str:
     if not is_merge_step and len(price_action_output) > 100:
         price_action_output = price_action_output[:100] + "..."
     
+    # Replace hardcoded "last X candles" text in template with actual num_candles value
+    # This handles cases where templates have hardcoded text like "last 20 candles"
+    if num_candles:
+        import re
+        # Replace patterns like "last 20 candles", "last 50 candles", etc.
+        template = re.sub(
+            r'last\s+\d+\s+candles?',
+            f'last {num_candles} candle{"s" if num_candles != 1 else ""}',
+            template,
+            flags=re.IGNORECASE
+        )
+        # Also handle Russian text patterns like "последние 20 свечей"
+        template = re.sub(
+            r'последние\s+\d+\s+свеч(?:ей|и|а)?',
+            f'последние {num_candles} свеч{"ей" if num_candles > 4 else "и" if num_candles > 1 else "а"}',
+            template,
+            flags=re.IGNORECASE
+        )
+    
     # Format template with all variables
     formatted = template.format(
         instrument=instrument,
@@ -78,8 +107,13 @@ class BaseAnalyzer:
         """Get the system prompt for this step."""
         raise NotImplementedError
     
-    def build_user_prompt(self, context: Dict[str, Any]) -> str:
-        """Build the user prompt from context."""
+    def build_user_prompt(self, context: Dict[str, Any], step_config: Optional[Dict[str, Any]] = None) -> str:
+        """Build the user prompt from context.
+        
+        Args:
+            context: Context dictionary with market_data, instrument, timeframe, previous_steps
+            step_config: Optional step configuration dict (may contain num_candles)
+        """
         raise NotImplementedError
     
     def analyze(
@@ -109,9 +143,9 @@ class BaseAnalyzer:
             
             # Use user_prompt_template from config if provided, otherwise use default
             if "user_prompt_template" in step_config and step_config["user_prompt_template"]:
-                user_prompt = format_user_prompt_template(step_config["user_prompt_template"], context)
+                user_prompt = format_user_prompt_template(step_config["user_prompt_template"], context, step_config)
             else:
-                user_prompt = self.build_user_prompt(context)
+                user_prompt = self.build_user_prompt(context, step_config)
             
             model = step_config.get("model")
             temperature = step_config.get("temperature", 0.7)
@@ -119,7 +153,7 @@ class BaseAnalyzer:
         else:
             # Fall back to hardcoded prompts (backward compatibility)
             system_prompt = self.get_system_prompt()
-            user_prompt = self.build_user_prompt(context)
+            user_prompt = self.build_user_prompt(context, None)
             model = None
             temperature = 0.7
             max_tokens = None
@@ -153,19 +187,22 @@ class WyckoffAnalyzer(BaseAnalyzer):
         to identify accumulation, distribution, markup, and markdown phases. Provide clear, 
         actionable insights about market context and likely scenarios."""
     
-    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+    def build_user_prompt(self, context: Dict[str, Any], step_config: Optional[Dict[str, Any]] = None) -> str:
         market_data: MarketData = context["market_data"]
         instrument = context["instrument"]
         timeframe = context["timeframe"]
         
+        # Get number of candles from step_config if available, otherwise default to 20
+        num_candles = step_config.get("num_candles", 20) if step_config else 20
+        
         # Build prompt with market data summary
-        # Ensure candles are sorted by timestamp (oldest first) before taking last 20
+        # Ensure candles are sorted by timestamp (oldest first) before taking last N
         sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         prompt = f"""Analyze {instrument} on {timeframe} timeframe using Wyckoff Method.
 
-Recent price action (last 20 candles):
+Recent price action (last {num_candles} candle{"s" if num_candles != 1 else ""}):
 """
-        for candle in sorted_candles[-20:]:
+        for candle in sorted_candles[-num_candles:]:
             prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: O={candle.open:.2f} H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f} V={candle.volume:.2f}\n"
         
         prompt += """
@@ -188,18 +225,21 @@ class SMCAnalyzer(BaseAnalyzer):
         to identify BOS (Break of Structure), CHoCH (Change of Character), Order Blocks, 
         Fair Value Gaps (FVG), and Liquidity Pools. Identify key levels and liquidity events."""
     
-    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+    def build_user_prompt(self, context: Dict[str, Any], step_config: Optional[Dict[str, Any]] = None) -> str:
         market_data: MarketData = context["market_data"]
         instrument = context["instrument"]
         timeframe = context["timeframe"]
         
-        # Ensure candles are sorted by timestamp (oldest first) before taking last 50
+        # Get number of candles from step_config if available, otherwise default to 50
+        num_candles = step_config.get("num_candles", 50) if step_config else 50
+        
+        # Ensure candles are sorted by timestamp (oldest first) before taking last N
         sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         prompt = f"""Analyze {instrument} on {timeframe} using Smart Money Concepts.
 
-Price structure (last 50 candles):
+Price structure (last {num_candles} candle{"s" if num_candles != 1 else ""}):
 """
-        for candle in sorted_candles[-50:]:
+        for candle in sorted_candles[-num_candles:]:
             prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: O={candle.open:.2f} H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f}\n"
         
         prompt += """
@@ -223,18 +263,21 @@ class VSAAnalyzer(BaseAnalyzer):
         and price action to identify large participant activity. Look for signals like no demand, 
         no supply, stopping volume, climactic action, and effort vs result."""
     
-    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+    def build_user_prompt(self, context: Dict[str, Any], step_config: Optional[Dict[str, Any]] = None) -> str:
         market_data: MarketData = context["market_data"]
         instrument = context["instrument"]
         timeframe = context["timeframe"]
         
-        # Ensure candles are sorted by timestamp (oldest first) before taking last 30
+        # Get number of candles from step_config if available, otherwise default to 30
+        num_candles = step_config.get("num_candles", 30) if step_config else 30
+        
+        # Ensure candles are sorted by timestamp (oldest first) before taking last N
         sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         prompt = f"""Analyze {instrument} on {timeframe} using Volume Spread Analysis.
 
-OHLCV data (last 30 candles):
+OHLCV data (last {num_candles} candle{"s" if num_candles != 1 else ""}):
 """
-        for candle in sorted_candles[-30:]:
+        for candle in sorted_candles[-num_candles:]:
             spread = candle.high - candle.low
             prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: Spread={spread:.2f} Volume={candle.volume:.2f} Close={candle.close:.2f}\n"
         
@@ -266,15 +309,18 @@ class DeltaAnalyzer(BaseAnalyzer):
         timeframe = context["timeframe"]
         
         # Note: Real delta requires order flow data, but we'll analyze what we can from volume/price
+        # Get number of candles from step_config if available, otherwise default to 30
+        num_candles = step_config.get("num_candles", 30) if step_config else 30
+        
         prompt = f"""Analyze {instrument} on {timeframe} using Delta analysis principles.
 
 Note: Full delta requires order flow data. Analyze buying/selling pressure from volume and price action.
 
-Price and volume data (last 30 candles):
+Price and volume data (last {num_candles} candle{"s" if num_candles != 1 else ""}):
 """
-        # Ensure candles are sorted by timestamp (oldest first) before taking last 30
+        # Ensure candles are sorted by timestamp (oldest first) before taking last N
         sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
-        for candle in sorted_candles[-30:]:
+        for candle in sorted_candles[-num_candles:]:
             body = abs(candle.close - candle.open)
             is_bullish = candle.close > candle.open
             prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: {'Bullish' if is_bullish else 'Bearish'} Body={body:.2f} Volume={candle.volume:.2f}\n"
@@ -300,20 +346,23 @@ class ICTAnalyzer(BaseAnalyzer):
         liquidity manipulation, PD Arrays (Premium/Discount), Fair Value Gaps, and optimal 
         entry points after liquidity sweeps."""
     
-    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+    def build_user_prompt(self, context: Dict[str, Any], step_config: Optional[Dict[str, Any]] = None) -> str:
         market_data: MarketData = context["market_data"]
         instrument = context["instrument"]
         timeframe = context["timeframe"]
         wyckoff_result = context["previous_steps"].get("wyckoff", {})
         smc_result = context["previous_steps"].get("smc", {})
         
-        # Ensure candles are sorted by timestamp (oldest first) before taking last 50
+        # Get number of candles from step_config if available, otherwise default to 50
+        num_candles = step_config.get("num_candles", 50) if step_config else 50
+        
+        # Ensure candles are sorted by timestamp (oldest first) before taking last N
         sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         prompt = f"""Analyze {instrument} on {timeframe} using ICT methodology.
 
-Price action (last 50 candles):
+Price action (last {num_candles} candle{"s" if num_candles != 1 else ""}):
 """
-        for candle in sorted_candles[-50:]:
+        for candle in sorted_candles[-num_candles:]:
             prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f}\n"
         
         prompt += f"""
@@ -342,18 +391,21 @@ class PriceActionAnalyzer(BaseAnalyzer):
         flags, triangles, head and shoulders, and candlestick formations. Provide specific entry, stop, 
         and target levels based on pattern completion."""
     
-    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+    def build_user_prompt(self, context: Dict[str, Any], step_config: Optional[Dict[str, Any]] = None) -> str:
         market_data: MarketData = context["market_data"]
         instrument = context["instrument"]
         timeframe = context["timeframe"]
         
-        # Ensure candles are sorted by timestamp (oldest first) before taking last 50
+        # Get number of candles from step_config if available, otherwise default to 50
+        num_candles = step_config.get("num_candles", 50) if step_config else 50
+        
+        # Ensure candles are sorted by timestamp (oldest first) before taking last N
         sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         prompt = f"""Analyze {instrument} on {timeframe} using Price Action and Pattern Analysis.
 
-Price action (last 50 candles):
+Price action (last {num_candles} candle{"s" if num_candles != 1 else ""}):
 """
-        for candle in sorted_candles[-50:]:
+        for candle in sorted_candles[-num_candles:]:
             body = abs(candle.close - candle.open)
             is_bullish = candle.close > candle.open
             upper_wick = candle.high - max(candle.open, candle.close)
@@ -381,10 +433,11 @@ class MergeAnalyzer(BaseAnalyzer):
         into a cohesive, actionable Telegram post. Follow the exact format and style specified 
         in the user prompt. Write in Russian as specified."""
     
-    def build_user_prompt(self, context: Dict[str, Any]) -> str:
+    def build_user_prompt(self, context: Dict[str, Any], step_config: Optional[Dict[str, Any]] = None) -> str:
         instrument = context["instrument"]
         timeframe = context["timeframe"]
         previous_steps = context["previous_steps"]
+        # Merge step doesn't use candles, so step_config is not needed here
         
         # Build prompt with all previous step outputs
         prompt = f"""Объедини результаты анализа {instrument} на таймфрейме {timeframe} в единый пост для Telegram.

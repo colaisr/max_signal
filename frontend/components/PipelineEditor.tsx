@@ -3,12 +3,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { API_BASE_URL } from '@/lib/config'
 import Select from '@/components/Select'
+import VariableTextEditor, { VariableTextEditorHandle } from '@/components/VariableTextEditor'
 
 interface Model {
   id: number
@@ -712,6 +713,42 @@ interface StepConfigurationPanelProps {
   onUpdate: (updates: Partial<StepConfig>) => void
 }
 
+// Wrapper component to manage editor ref
+function VariableTextEditorWrapper({ 
+  stepIndex, 
+  value, 
+  onChange, 
+  availableVariables 
+}: { 
+  stepIndex: number
+  value: string
+  onChange: (value: string) => void
+  availableVariables: string[]
+}) {
+  const editorRef = useRef<VariableTextEditorHandle>(null)
+  
+  // Store ref in a global map for VariablePalette access
+  useEffect(() => {
+    if (!(window as any).variableEditorRefs) {
+      (window as any).variableEditorRefs = new Map()
+    }
+    (window as any).variableEditorRefs.set(stepIndex, editorRef)
+    return () => {
+      (window as any).variableEditorRefs?.delete(stepIndex)
+    }
+  }, [stepIndex])
+  
+  return (
+    <VariableTextEditor
+      ref={editorRef}
+      value={value}
+      onChange={onChange}
+      stepIndex={stepIndex}
+      availableVariables={availableVariables}
+    />
+  )
+}
+
 function StepConfigurationPanel({ step, stepIndex, allSteps, enabledModels, onUpdate }: StepConfigurationPanelProps) {
   const availableStepNames = allSteps
     .slice(0, stepIndex)
@@ -949,64 +986,68 @@ function StepConfigurationPanel({ step, stepIndex, allSteps, enabledModels, onUp
       {/* User Prompt Template */}
       <div>
         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase">User Prompt Template</p>
-        <VariablePalette
-          allSteps={allSteps}
-          currentStepIndex={stepIndex}
-          onInsertVariable={(variable) => {
-            const textarea = document.querySelector(`textarea[data-step-index="${stepIndex}"]`) as HTMLTextAreaElement
-            if (textarea) {
-              const start = textarea.selectionStart
-              const end = textarea.selectionEnd
-              const currentValue = step.user_prompt_template
-              const newValue = currentValue.slice(0, start) + variable + currentValue.slice(end)
-              onUpdate({ user_prompt_template: newValue })
-              // Set cursor position after inserted variable
-              setTimeout(() => {
-                textarea.focus()
-                textarea.setSelectionRange(start + variable.length, start + variable.length)
-              }, 0)
-            }
-          }}
-        />
         {(() => {
-          // Check for invalid variable references (steps that come after this one)
-          const template = step.user_prompt_template || ''
-          const referencedVars = template.match(/\{(\w+)_output\}/g) || []
-          const invalidRefs: string[] = []
+          // Get available variables
+          const previousSteps = allSteps.slice(0, stepIndex)
+          const standardVars = ['{instrument}', '{timeframe}', '{market_data_summary}']
+          const stepOutputVars = previousSteps.map(s => `{${s.step_name}_output}`)
+          const availableVariables = [...standardVars, ...stepOutputVars]
           
-          referencedVars.forEach(varMatch => {
-            const varName = varMatch.replace(/[{}]/g, '')
-            const referencedStepName = varName.replace('_output', '')
-            const referencedStepIndex = allSteps.findIndex(s => s.step_name === referencedStepName)
-            
-            if (referencedStepIndex > stepIndex) {
-              invalidRefs.push(`{${varName}}`)
-            }
-          })
-          
-          if (invalidRefs.length > 0) {
-            return (
-              <div className="mb-2 p-2 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">
-                <p className="text-xs font-semibold text-red-800 dark:text-red-300 mb-1">
-                  ⚠️ Invalid Variable References
-                </p>
-                <p className="text-xs text-red-700 dark:text-red-400">
-                  This step references: {invalidRefs.join(', ')} from steps that come <strong>after</strong> it. 
-                  These variables won't be available and will cause an error. Please reorder steps or remove these references.
-                </p>
-              </div>
-            )
-          }
-          return null
+          return (
+            <>
+              <VariablePalette
+                allSteps={allSteps}
+                currentStepIndex={stepIndex}
+                editorRef={(index: number) => {
+                  const refs = (window as any).variableEditorRefs as Map<number, React.RefObject<VariableTextEditorHandle>>
+                  return refs?.get(index) || { current: null }
+                }}
+                onInsertVariable={(variable, editorRef) => {
+                  if (editorRef?.current) {
+                    editorRef.current.insertVariable(variable)
+                  }
+                }}
+              />
+              {(() => {
+                // Check for invalid variable references (steps that come after this one)
+                const template = step.user_prompt_template || ''
+                const referencedVars = template.match(/\{(\w+)_output\}/g) || []
+                const invalidRefs: string[] = []
+                
+                referencedVars.forEach(varMatch => {
+                  const varName = varMatch.replace(/[{}]/g, '')
+                  const referencedStepName = varName.replace('_output', '')
+                  const referencedStepIndex = allSteps.findIndex(s => s.step_name === referencedStepName)
+                  
+                  if (referencedStepIndex > stepIndex) {
+                    invalidRefs.push(`{${varName}}`)
+                  }
+                })
+                
+                if (invalidRefs.length > 0) {
+                  return (
+                    <div className="mb-2 p-2 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">
+                      <p className="text-xs font-semibold text-red-800 dark:text-red-300 mb-1">
+                        ⚠️ Invalid Variable References
+                      </p>
+                      <p className="text-xs text-red-700 dark:text-red-400">
+                        This step references: {invalidRefs.join(', ')} from steps that come <strong>after</strong> it. 
+                        These variables won't be available and will cause an error. Please reorder steps or remove these references.
+                      </p>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+              <VariableTextEditorWrapper
+                stepIndex={stepIndex}
+                value={step.user_prompt_template}
+                onChange={(newValue) => onUpdate({ user_prompt_template: newValue })}
+                availableVariables={availableVariables}
+              />
+            </>
+          )
         })()}
-        <textarea
-          data-step-index={stepIndex}
-          value={step.user_prompt_template}
-          onChange={(e) => onUpdate({ user_prompt_template: e.target.value })}
-          rows={8}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-mono"
-          placeholder="Example: Analyze {instrument} on {timeframe} timeframe.&#10;&#10;Recent price action:&#10;{market_data_summary}"
-        />
       </div>
     </div>
   )
@@ -1016,10 +1057,11 @@ function StepConfigurationPanel({ step, stepIndex, allSteps, enabledModels, onUp
 interface VariablePaletteProps {
   allSteps: StepConfig[]
   currentStepIndex: number
-  onInsertVariable: (variable: string) => void
+  editorRef?: (index: number) => React.RefObject<VariableTextEditorHandle>
+  onInsertVariable: (variable: string, editorRef?: React.RefObject<VariableTextEditorHandle>) => void
 }
 
-function VariablePalette({ allSteps, currentStepIndex, onInsertVariable }: VariablePaletteProps) {
+function VariablePalette({ allSteps, currentStepIndex, editorRef, onInsertVariable }: VariablePaletteProps) {
   // Get previous steps (steps before current one)
   const previousSteps = allSteps.slice(0, currentStepIndex)
   
@@ -1042,31 +1084,37 @@ function VariablePalette({ allSteps, currentStepIndex, onInsertVariable }: Varia
         Available Variables (click to insert):
       </p>
       <div className="flex flex-wrap gap-2">
-        {standardVars.map((v) => (
-          <button
-            key={v.name}
-            type="button"
-            onClick={() => onInsertVariable(v.name)}
-            className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 rounded border border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-300 font-mono cursor-pointer transition-colors"
-            title={v.desc}
-          >
-            {v.name}
-          </button>
-        ))}
+        {standardVars.map((v) => {
+          const ref = editorRef ? editorRef(currentStepIndex) : undefined
+          return (
+            <button
+              key={v.name}
+              type="button"
+              onClick={() => onInsertVariable(v.name, ref)}
+              className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 rounded border border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-300 font-mono cursor-pointer transition-colors"
+              title={v.desc}
+            >
+              {v.name}
+            </button>
+          )
+        })}
         {stepOutputVars.length > 0 && (
           <>
             <span className="text-xs text-blue-600 dark:text-blue-400 self-center">|</span>
-            {stepOutputVars.map((v) => (
-              <button
-                key={v.name}
-                type="button"
-                onClick={() => onInsertVariable(v.name)}
-                className="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900/30 hover:bg-purple-200 dark:hover:bg-purple-900/50 rounded border border-purple-300 dark:border-purple-700 text-purple-800 dark:text-purple-300 font-mono cursor-pointer transition-colors"
-                title={v.desc}
-              >
-                {v.name}
-              </button>
-            ))}
+            {stepOutputVars.map((v) => {
+              const ref = editorRef ? editorRef(currentStepIndex) : undefined
+              return (
+                <button
+                  key={v.name}
+                  type="button"
+                  onClick={() => onInsertVariable(v.name, ref)}
+                  className="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900/30 hover:bg-purple-200 dark:hover:bg-purple-900/50 rounded border border-purple-300 dark:border-purple-700 text-purple-800 dark:text-purple-300 font-mono cursor-pointer transition-colors"
+                  title={v.desc}
+                >
+                  {v.name}
+                </button>
+              )
+            })}
           </>
         )}
         {previousSteps.length === 0 && (

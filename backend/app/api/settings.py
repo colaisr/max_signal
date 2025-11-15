@@ -23,6 +23,7 @@ class ModelResponse(BaseModel):
     max_tokens: Optional[int]
     cost_per_1k_tokens: Optional[str]
     is_enabled: bool
+    has_failures: bool
     
     class Config:
         from_attributes = True

@@ -60,8 +60,9 @@ Constraints and preferences:
 - Data model (MySQL)
   - `instruments`: id, symbol, type, exchange (NYMEX/CME/NASDAQ/NYSE/MOEX/binance), figi (Tinkoff FIGI for MOEX instruments), is_enabled (admin toggle for dropdown visibility)
   - `analysis_types`: id, name, display_name, description, version, config (JSON with steps configuration), is_active, created_at, updated_at
-  - `analysis_runs`: id, trigger_type (manual/scheduled), instrument_id, analysis_type_id (links to analysis_types), timeframe, status (queued/running/succeeded/failed), created_at, finished_at, cost_est_total
-  - `analysis_steps`: id, run_id, step_name (wyckoff/smc/vsa/delta/ict/price_action/merge), input_blob, output_blob, llm_model, tokens, cost_est, created_at
+  - `analysis_runs`: id, trigger_type (manual/scheduled), instrument_id, analysis_type_id (links to analysis_types), timeframe, status (queued/running/succeeded/failed/model_failure), created_at, finished_at, cost_est_total
+  - `analysis_steps`: id, run_id, step_name (wyckoff/smc/vsa/delta/ict/price_action/merge/model_failures), input_blob, output_blob, llm_model, tokens, cost_est, created_at
+  - `available_models`: id, name, display_name, provider, description, max_tokens, cost_per_1k_tokens, is_enabled, has_failures (marks models with recorded failures - rate limits, not found, etc.), created_at, updated_at
 - `telegram_posts`: id, run_id, message_text, status (pending/sent/failed), message_id, sent_at
 - `telegram_users`: id, chat_id, username, first_name, last_name, is_active, started_at, last_message_at, created_at, updated_at
 - `data_cache`: id, key, payload, fetched_at, ttl_seconds
@@ -69,6 +70,10 @@ Constraints and preferences:
 - Core services
   - Data adapters: normalized OHLCV fetch; light feature extraction (structure hints, volume stats if available)
   - Agent orchestrator: runs intrasteps (Wyckoff, SMC, VSA, Delta, ICT) using stable prompts and tool schemas; then merges into final Telegram post
+    - Model failure detection: automatically detects model errors (429 rate limits, 404 not found, invalid model)
+    - Failure marking: marks failed models with `has_failures=True` in database
+    - Pipeline behavior: stops execution immediately on model errors (sets status to `model_failure`)
+    - Error tracking: stores failure details in `model_failures` step for easy retrieval
   - Telegram publisher: split message ≤4096 chars; send to all active users who started the bot; record `message_id`; handle partial failures gracefully
 - Telegram bot handler: process `/start`, `/help`, `/status` commands; automatically register users when they start the bot
   - Scheduler: APScheduler triggers daystart (daily), extend to intervals later
@@ -115,6 +120,7 @@ Constraints and preferences:
   - Analysis name and description (in Russian)
   - Number of steps
   - Estimated cost range
+  - Default timeframe (reliable, always available)
   - Last run timestamp
   - Actions: "Configure", "Run", "View History"
   
@@ -122,7 +128,10 @@ Constraints and preferences:
   - Analysis overview (name, description, use case, defaults)
   - **Pipeline Visualization**: Shows all steps with:
     - Step name and order
-    - LLM model (dropdown to change)
+    - LLM model (custom dropdown with failure indicators)
+      - Failed models show ⚠️ icon and orange styling
+      - Warning message displayed when failed model is selected
+      - Custom Select component for cross-platform compatibility (works on macOS, Windows, Linux)
     - System prompt (view/edit) - all in Russian
     - User prompt template (with variables: `{instrument}`, `{timeframe}`, `{market_data}`) - all in Russian
     - Data source/tools used
@@ -146,12 +155,26 @@ Constraints and preferences:
 **Runs Page (`/runs`):**
 - Dashboard view with filters (analysis type, status, instrument, date range)
 - Runs table with columns: ID, Analysis Type, Instrument, Timeframe, Status, Steps Completed, Cost, Created/Finished
+- Status badges include:
+  - `succeeded` (green) - All steps completed successfully
+  - `failed` (red) - Pipeline failed completely
+  - `model_failure` (orange) - Partial failure due to model errors (rate limits, not found, etc.)
+    - Tooltip shows error details on hover
+    - Model automatically marked with `has_failures=True` in database
 - Detail view: Timeline with expandable steps, final Telegram post preview, publish button
 
 **Settings Page (`/settings`):**
 - Tabbed interface:
   - **LLM Models**: Available models with advanced filtering and syncing capabilities
     - **Model Syncing**: "Sync from OpenRouter" button fetches latest available models from OpenRouter API
+      - New models added to database (disabled by default)
+      - Existing models preserved (not overwritten) - preserves `has_failures` flag
+    - **Model Failure Tracking**: 
+      - Models automatically marked with `has_failures=True` when they fail during analysis runs
+      - Failure types detected: rate limits (429), model not found (404), invalid model errors
+      - Visual indication: ⚠️ icon and "Has Failures" badge in settings page
+      - Failed models shown with warning in all dropdowns (analysis configuration, etc.)
+      - Admin can disable failed models to prevent future use
     - **Search & Filters**: 
       - Search by model name, provider, or description
       - Filter by provider (dropdown)
@@ -159,7 +182,7 @@ Constraints and preferences:
       - "Free to use models" toggle to filter free models (models with "free" in name)
     - **Scrollable List**: Models displayed in scrollable container (max height 500px) for easy browsing
     - Enable/disable toggles for each model
-    - Models show: display name, provider, model ID, description, max tokens, cost per 1K tokens
+    - Models show: display name, provider, model ID, description, max tokens, cost per 1K tokens, failure status
     - New models from sync are disabled by default (admin can enable manually)
   - **Data Sources**: CCXT exchanges, yfinance markets, cache settings
   - **Telegram**: Bot token, channel ID, publishing settings, active users count
@@ -181,12 +204,14 @@ Constraints and preferences:
 - Left sidebar navigation (or top nav bar for MVP)
 - Dark-first theme
 - Timeline + accordions for steps
-- Status badges with colors (green=succeeded, blue=running, red=failed, yellow=queued)
+- Status badges with colors (green=succeeded, blue=running, red=failed, yellow=queued, orange=model_failure)
 - Expandable sections for prompts/outputs
 - Copy-to-clipboard functionality
 - Real-time updates while pipeline runs (polling every 2s)
 - All UI text in Russian
 - Instrument filtering hints ("Показаны только инструменты, подходящие для данного типа анализа")
+- Custom Select component for model dropdowns (cross-platform compatibility, proper failure indicators)
+- Tooltip components for error messages (Bootstrap-like styling with Tailwind CSS)
 
 
 ### 4) Analysis Types and Pipelines
@@ -590,6 +615,9 @@ All analysis types use the same 6-7 step pipeline:
 
 - Model variance / provider outages
   - Route via OpenRouter to switch models/providers quickly; keep step prompts deterministic.
+  - **Model Failure Tracking**: Automatically mark models with failures (rate limits, not found errors) to prevent repeated use
+  - Failed models visually indicated in all dropdowns; admin can disable them in Settings
+  - Pipeline stops immediately on model errors to prevent wasted resources
 - Cost control
   - Record tokens; add caps/alerts; prefer concise prompts; cache data.
 - Data quality/latency
@@ -615,6 +643,7 @@ All analysis types use the same 6-7 step pipeline:
 - [x] Futures Contracts Support ✅ (Completed: Bloomberg-style ticker support (NG1, B1!, etc.), MOEX futures fetching (NGX5, 400+ contracts), exchange detection (NYMEX/CME/MOEX), automatic ticker mapping)
 - [x] Multiple Analysis Types ✅ (Completed: Created commodity_futures, crypto_analysis, equity_analysis analysis types with Russian prompts, PriceActionAnalyzer step, instrument filtering by analysis type, dashboard analysis type selector)
 - [x] Analysis Type System ✅ (Completed: Pipeline uses analysis_type configuration, supports custom_config override, all prompts in Russian, migrated to Alembic migrations)
+- [x] Model Failure Tracking ✅ (Completed: `has_failures` field added to `available_models` table, automatic marking when model errors occur, visual indicators in dropdowns and settings page, custom Select component for cross-platform support, sync logic preserves failure status, `model_failure` run status with tooltips)
 - [ ] Scheduling
 - [x] Deployment (single VM) ✅ (Scripts and documentation ready - see `docs/PRODUCTION_DEPLOYMENT.md`)
 - [ ] Backtesting (Phase 2)
@@ -743,6 +772,32 @@ Since we need to test and observe the analysis pipeline, we should build a **min
   - Hover effects and consistent styling ✅
   - Responsive layout with flex-wrap for smaller screens ✅
 - **Testing:** Can sync models from API, filter by provider/enabled/free, search works correctly ✅
+
+**11. Model Failure Tracking** ✅ **COMPLETED** (1 day)
+- **Database Schema:**
+  - Added `has_failures` boolean field to `available_models` table ✅
+  - Added `model_failure` status to `analysis_runs.status` enum ✅
+  - Migration created and applied ✅
+- **Pipeline Integration:**
+  - Automatic detection of model errors (429 rate limits, 404 not found, invalid model) ✅
+  - Models marked with `has_failures=True` when errors occur ✅
+  - Pipeline stops execution immediately on model errors ✅
+  - Failure details stored in `model_failures` step for easy retrieval ✅
+- **Visual Indicators:**
+  - Custom Select component for cross-platform dropdown support (works on macOS, Windows, Linux) ✅
+  - Failed models show ⚠️ icon and orange styling in dropdowns ✅
+  - Warning message displayed when failed model is selected ✅
+  - Settings page shows "Has Failures" badge for failed models ✅
+  - Tooltip component for error messages (Bootstrap-like styling) ✅
+- **Sync Preservation:**
+  - When syncing from OpenRouter API, `has_failures` flag is preserved for existing models ✅
+  - Only new models are added; existing models keep their failure status ✅
+- **UI Improvements:**
+  - Analysis cards show default timeframe (reliable) instead of default instrument (can be disabled) ✅
+  - Card buttons docked to bottom for consistent alignment ✅
+  - Run status badges show `model_failure` with orange color ✅
+  - Tooltips show error details on hover for failed runs ✅
+- **Testing:** Model failures detected, marked in database, shown in UI, sync preserves status ✅
 
 **Why This Approach:**
 - ✅ Can test visually instead of just API calls

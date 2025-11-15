@@ -5,6 +5,7 @@ import axios from 'axios'
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { API_BASE_URL } from '@/lib/config'
+import Select from '@/components/Select'
 
 interface Model {
   id: number
@@ -13,6 +14,7 @@ interface Model {
   provider: string
   description: string | null
   is_enabled: boolean
+  has_failures: boolean
 }
 
 interface DataSource {
@@ -118,6 +120,7 @@ export default function AnalysisDetailPage() {
   const { data: enabledModels = [] } = useQuery({
     queryKey: ['settings', 'models', 'enabled'],
     queryFn: fetchEnabledModels,
+    staleTime: 0, // Always fetch fresh data to get latest has_failures status
   })
 
   const { data: enabledDataSources = [] } = useQuery({
@@ -376,21 +379,35 @@ export default function AnalysisDetailPage() {
                               <div>
                                 <label className="text-gray-500 dark:text-gray-400">Model:</label>
                                 {isEditing ? (
-                                  <select
-                                    value={step.model}
-                                    onChange={(e) => updateStepConfig(index, 'model', e.target.value)}
-                                    className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                                  >
-                                    {enabledModels.map((model) => (
-                                      <option key={model.id} value={model.name}>
-                                        {model.display_name} ({model.provider})
-                                      </option>
-                                    ))}
-                                  </select>
+                                  <div className="mt-1">
+                                    <Select
+                                      value={step.model}
+                                      onChange={(value) => updateStepConfig(index, 'model', value)}
+                                      options={enabledModels.map((model) => ({
+                                        value: model.name,
+                                        label: `${model.display_name} (${model.provider})${model.has_failures ? ' - Has failures' : ''}`,
+                                        hasFailures: model.has_failures,
+                                      }))}
+                                      className="w-full"
+                                    />
+                                    {enabledModels.find(m => m.name === step.model)?.has_failures && (
+                                      <p className="mt-1 text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1">
+                                        <span>⚠️</span>
+                                        <span>This model has recorded failures and may not work reliably</span>
+                                      </p>
+                                    )}
+                                  </div>
                                 ) : (
-                                  <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                                    {step.model}
-                                  </span>
+                                  <div className="ml-2">
+                                    <span className="text-gray-900 dark:text-white font-medium">
+                                      {step.model}
+                                    </span>
+                                    {enabledModels.find(m => m.name === step.model)?.has_failures && (
+                                      <span className="ml-2 text-xs px-2 py-1 bg-orange-100 dark:bg-orange-900/30 rounded text-orange-600 dark:text-orange-400">
+                                        ⚠️ Has failures
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                               <div>

@@ -15,6 +15,7 @@ interface Model {
   max_tokens: number | null
   cost_per_1k_tokens: string | null
   is_enabled: boolean
+  has_failures: boolean
 }
 
 interface DataSource {
@@ -429,6 +430,7 @@ export default function SettingsPage() {
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
                               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                {model.has_failures && <span className="text-orange-600 dark:text-orange-400 mr-1">⚠️</span>}
                                 {model.display_name}
                               </h3>
                               <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
@@ -437,6 +439,11 @@ export default function SettingsPage() {
                               <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-blue-600 dark:text-blue-400">
                                 {model.name}
                               </span>
+                              {model.has_failures && (
+                                <span className="text-xs px-2 py-1 bg-orange-100 dark:bg-orange-900/30 rounded text-orange-600 dark:text-orange-400 font-medium">
+                                  Has Failures
+                                </span>
+                              )}
                             </div>
                             {model.description && (
                               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">

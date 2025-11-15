@@ -160,6 +160,15 @@ class AnalysisPipeline:
                             "error_type": error_type
                         })
                         
+                        # Mark model as having failures in database
+                        from app.models.settings import AvailableModel
+                        failed_model = db.query(AvailableModel).filter(
+                            AvailableModel.name == model_name
+                        ).first()
+                        if failed_model:
+                            failed_model.has_failures = True
+                            logger.info(f"marked_model_as_failing: model={model_name}, run_id={run.id}")
+                        
                         # Save error step
                         error_step = AnalysisStep(
                             run_id=run.id,

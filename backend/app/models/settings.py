@@ -18,6 +18,7 @@ class AvailableModel(Base):
     max_tokens = Column(Integer, nullable=True)  # Max context window
     cost_per_1k_tokens = Column(String(50), nullable=True)  # e.g., "$0.15/$0.60"
     is_enabled = Column(Boolean, default=True, nullable=False)
+    has_failures = Column(Boolean, default=False, nullable=False)  # Marked as having failures (rate limits, not found, etc.)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

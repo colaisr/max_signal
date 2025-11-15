@@ -237,7 +237,13 @@ const VariableTextEditor = forwardRef<VariableTextEditorHandle, VariableTextEdit
         const pill = document.createElement('span')
         pill.dataset.variable = segment.content
         pill.contentEditable = 'false'
-        pill.className = 'inline-flex items-center px-2 py-0.5 mx-0.5 rounded border font-mono text-xs bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-300'
+        // Determine if it's a standard variable or step output variable
+        const isStepOutput = segment.content.includes('_output')
+        pill.className = `inline-flex items-center px-2 py-0.5 mx-0.5 rounded border font-mono text-xs ${
+          isStepOutput 
+            ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700 text-purple-800 dark:text-purple-300'
+            : 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-300'
+        }`
         pill.textContent = segment.content
         
         const deleteBtn = document.createElement('span')

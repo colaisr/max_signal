@@ -150,17 +150,28 @@ export default function AnalysisDetailPage() {
     }
   }, [analysis, editableConfig])
 
-  // Set defaults on load
+  // Set defaults on load - only if default instrument is available in enabled instruments
   useEffect(() => {
-    if (analysis) {
-      if (!selectedInstrument && analysis.config.default_instrument) {
-        setSelectedInstrument(analysis.config.default_instrument)
+    if (analysis && instruments.length > 0) {
+      // Check if default instrument is available in enabled instruments
+      const defaultInstrumentAvailable = instruments.some(
+        inst => inst.symbol === analysis.config.default_instrument
+      )
+      
+      if (!selectedInstrument) {
+        if (defaultInstrumentAvailable && analysis.config.default_instrument) {
+          // Use default if available
+          setSelectedInstrument(analysis.config.default_instrument)
+        } else if (instruments.length > 0) {
+          // Otherwise use first available instrument
+          setSelectedInstrument(instruments[0].symbol)
+        }
       }
       if (!selectedTimeframe && analysis.config.default_timeframe) {
         setSelectedTimeframe(analysis.config.default_timeframe)
       }
     }
-  }, [analysis, selectedInstrument, selectedTimeframe])
+  }, [analysis, instruments, selectedInstrument, selectedTimeframe])
 
   const handleRunAnalysis = () => {
     if (!selectedInstrument || !selectedTimeframe) {

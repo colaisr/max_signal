@@ -129,9 +129,9 @@ export default function AnalysesPage() {
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">Default:</span>
+                    <span className="text-gray-500 dark:text-gray-400">Default Timeframe:</span>
                     <span className="text-gray-900 dark:text-white font-medium">
-                      {analysis.config.default_instrument} {analysis.config.default_timeframe}
+                      {analysis.config.default_timeframe}
                     </span>
                   </div>
                 </div>

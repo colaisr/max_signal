@@ -70,14 +70,6 @@ async function updateModel(id: number, is_enabled: boolean) {
   return data
 }
 
-async function updateDataSource(id: number, is_enabled: boolean) {
-  const { data } = await axios.put(
-    `${API_BASE_URL}/api/settings/data-sources/${id}`,
-    { is_enabled },
-    { withCredentials: true }
-  )
-  return data
-}
 
 async function updateTelegramSettings(bot_token: string | null) {
   const { data } = await axios.put(
@@ -225,13 +217,6 @@ export default function SettingsPage() {
     },
   })
 
-  const updateDataSourceMutation = useMutation({
-    mutationFn: ({ id, is_enabled }: { id: number; is_enabled: boolean }) =>
-      updateDataSource(id, is_enabled),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'data-sources'] })
-    },
-  })
 
   const updateTelegramMutation = useMutation({
     mutationFn: () => updateTelegramSettings(telegramBotToken || null),
@@ -484,75 +469,6 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
-        </div>
-
-        {/* Available Data Sources Section */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Available Data Sources
-          </h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Enable or disable data sources. Only enabled sources will appear in analysis configuration dropdowns.
-          </p>
-
-          {dataSourcesLoading ? (
-            <p className="text-gray-600 dark:text-gray-400">Loading data sources...</p>
-          ) : (
-            <div className="space-y-4">
-              {dataSources.map((source) => (
-                <div
-                  key={source.id}
-                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                          {source.display_name}
-                        </h3>
-                        <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
-                          {source.name}
-                        </span>
-                      </div>
-                      {source.description && (
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                          {source.description}
-                        </p>
-                      )}
-                      <div className="flex gap-2 text-xs">
-                        {source.supports_crypto && (
-                          <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded text-green-700 dark:text-green-400">
-                            Crypto
-                          </span>
-                        )}
-                        {source.supports_stocks && (
-                          <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-blue-700 dark:text-blue-400">
-                            Stocks
-                          </span>
-                        )}
-                        {source.supports_forex && (
-                          <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 rounded text-purple-700 dark:text-purple-400">
-                            Forex
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer ml-4">
-                      <input
-                        type="checkbox"
-                        checked={source.is_enabled}
-                        onChange={(e) =>
-                          updateDataSourceMutation.mutate({ id: source.id, is_enabled: e.target.checked })
-                        }
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-                </div>
-              ))}
             </div>
           )}
         </div>
@@ -832,6 +748,62 @@ export default function SettingsPage() {
               {updateTinkoffMutation.isPending ? 'Saving...' : 'Save Tinkoff Settings'}
             </button>
           </div>
+        </div>
+
+        {/* Available Data Sources Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Available Data Sources
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Data sources used by the system to fetch market data. Sources are automatically selected based on instrument type.
+          </p>
+
+          {dataSourcesLoading ? (
+            <p className="text-gray-600 dark:text-gray-400">Loading data sources...</p>
+          ) : (
+            <div className="space-y-4">
+              {dataSources.map((source) => (
+                <div
+                  key={source.id}
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        {source.display_name}
+                      </h3>
+                      <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
+                        {source.name}
+                      </span>
+                    </div>
+                    {source.description && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        {source.description}
+                      </p>
+                    )}
+                    <div className="flex gap-2 text-xs">
+                      {source.supports_crypto && (
+                        <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded text-green-700 dark:text-green-400">
+                          Crypto
+                        </span>
+                      )}
+                      {source.supports_stocks && (
+                        <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-blue-700 dark:text-blue-400">
+                          Stocks
+                        </span>
+                      )}
+                      {source.supports_forex && (
+                        <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 rounded text-purple-700 dark:text-purple-400">
+                          Forex
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

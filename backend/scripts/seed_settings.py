@@ -79,6 +79,15 @@ DATA_SOURCES = [
         "is_enabled": True,
     },
     {
+        "name": "tinkoff",
+        "display_name": "Tinkoff Invest API",
+        "description": "Tinkoff Invest API for MOEX (Moscow Exchange) instruments. Supports Russian stocks, bonds, ETFs, and futures. Requires API token configured in Settings.",
+        "supports_crypto": False,
+        "supports_stocks": True,
+        "supports_forex": False,
+        "is_enabled": True,
+    },
+    {
         "name": "alpha_vantage",
         "display_name": "Alpha Vantage",
         "description": "Premium financial data API. Requires API key. Supports stocks, forex, crypto, and technical indicators.",

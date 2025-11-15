@@ -1,15 +1,16 @@
 """
 Analysis pipeline orchestrator.
-Runs the Daystart analysis through all steps: Wyckoff, SMC, VSA, Delta, ICT, Merge.
+Dynamically builds and executes analysis steps from configuration.
 """
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from app.models.analysis_run import AnalysisRun, RunStatus
 from app.models.analysis_step import AnalysisStep
 from app.services.data.adapters import DataService
 from app.services.llm.client import LLMClient
 from app.services.analysis.steps import (
+    BaseAnalyzer,
     WyckoffAnalyzer,
     SMCAnalyzer,
     VSAAnalyzer,
@@ -23,21 +24,174 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# Mapping of step names to analyzer classes
+STEP_ANALYZER_MAP = {
+    "wyckoff": WyckoffAnalyzer,
+    "smc": SMCAnalyzer,
+    "vsa": VSAAnalyzer,
+    "delta": DeltaAnalyzer,
+    "ict": ICTAnalyzer,
+    "price_action": PriceActionAnalyzer,
+    "merge": MergeAnalyzer,
+}
+
+
+class GenericLLMAnalyzer(BaseAnalyzer):
+    """Generic LLM analyzer for custom steps without specific analyzer classes."""
+    
+    def get_system_prompt(self) -> str:
+        """Return default system prompt for generic steps."""
+        return "You are an expert analyst. Analyze the provided data and provide insights."
+    
+    def build_user_prompt(self, context: Dict[str, Any], step_config: Optional[Dict[str, Any]] = None) -> str:
+        """Build user prompt from template in step_config."""
+        if step_config and "user_prompt_template" in step_config:
+            from app.services.analysis.steps import format_user_prompt_template
+            return format_user_prompt_template(step_config["user_prompt_template"], context, step_config)
+        return "Please analyze the provided data."
+
+
 class AnalysisPipeline:
     """Orchestrates the complete analysis pipeline."""
     
     def __init__(self):
         self.data_service = None  # Will be initialized in run() with db session to get Tinkoff token
         self.llm_client = None  # Will be initialized in run() with db session
-        self.steps = [
-            ("wyckoff", WyckoffAnalyzer()),
-            ("smc", SMCAnalyzer()),
-            ("vsa", VSAAnalyzer()),
-            ("delta", DeltaAnalyzer()),
-            ("ict", ICTAnalyzer()),
-            ("price_action", PriceActionAnalyzer()),
-            ("merge", MergeAnalyzer()),
-        ]
+    
+    def _build_steps_from_config(self, config: Dict[str, Any]) -> List[Tuple[str, BaseAnalyzer, Dict[str, Any]]]:
+        """Build step list dynamically from config.
+        
+        Args:
+            config: Pipeline configuration dict with "steps" array
+            
+        Returns:
+            List of tuples: (step_name, analyzer_instance, step_config)
+        """
+        if not config or "steps" not in config:
+            raise ValueError("Config must contain 'steps' array")
+        
+        steps_config = config["steps"]
+        
+        # Sort steps by order field (if present), otherwise use array order
+        def get_order(step: Dict[str, Any]) -> int:
+            return step.get("order", 999)  # Steps without order go to end
+        
+        sorted_steps = sorted(steps_config, key=get_order)
+        
+        # Build step list with analyzer instances
+        steps = []
+        for step_config in sorted_steps:
+            step_name = step_config.get("step_name")
+            if not step_name:
+                logger.warning(f"Step config missing step_name, skipping: {step_config}")
+                continue
+            
+            # Get analyzer class from map, or use generic analyzer
+            analyzer_class = STEP_ANALYZER_MAP.get(step_name, GenericLLMAnalyzer)
+            analyzer_instance = analyzer_class()
+            
+            steps.append((step_name, analyzer_instance, step_config))
+        
+        return steps
+    
+    def _build_context_for_step(
+        self,
+        context: Dict[str, Any],
+        step_config: Dict[str, Any],
+        all_steps: List[Tuple[str, BaseAnalyzer, Dict[str, Any]]]
+    ) -> Dict[str, Any]:
+        """Build enhanced context with included previous step outputs.
+        
+        Args:
+            context: Base context with instrument, timeframe, market_data, previous_steps
+            step_config: Current step configuration (may contain include_context)
+            all_steps: All steps in pipeline (for validation)
+            
+        Returns:
+            Enhanced context dict with included context injected
+        """
+        enhanced_context = context.copy()
+        
+        # Check if step has include_context configuration
+        include_context_config = step_config.get("include_context")
+        if not include_context_config:
+            return enhanced_context
+        
+        # Get list of steps to include
+        included_step_names = include_context_config.get("steps", [])
+        if not included_step_names:
+            return enhanced_context
+        
+        # Build context section from previous step outputs
+        context_sections = []
+        previous_steps = context.get("previous_steps", {})
+        
+        for step_name in included_step_names:
+            if step_name in previous_steps:
+                step_output = previous_steps[step_name].get("output", "")
+                format_type = include_context_config.get("format", "full")
+                
+                if format_type == "summary" and len(step_output) > 200:
+                    step_output = step_output[:200] + "..."
+                
+                context_sections.append(f"{step_name.upper()}:\n{step_output}")
+            else:
+                logger.warning(f"Step {step_name} not found in previous_steps for context inclusion")
+        
+        if context_sections:
+            context_text = "\n\n".join(context_sections)
+            placement = include_context_config.get("placement", "before")
+            
+            # Store context text in enhanced_context for use in prompt formatting
+            enhanced_context["_included_context"] = {
+                "text": context_text,
+                "placement": placement
+            }
+        
+        return enhanced_context
+    
+    @staticmethod
+    def detect_step_references(prompt: str, available_steps: List[str]) -> List[str]:
+        """Detect which steps are mentioned in the prompt.
+        
+        This is a simple detection algorithm that looks for step names in the prompt.
+        More sophisticated detection can be added later.
+        
+        Args:
+            prompt: User prompt template string
+            available_steps: List of available step names
+            
+        Returns:
+            List of detected step names
+        """
+        detected = []
+        prompt_lower = prompt.lower()
+        
+        # Common step name variations
+        step_variations = {
+            "wyckoff": ["wyckoff", "wyckoff method", "wyckoff phase"],
+            "smc": ["smc", "smart money", "smart money concepts"],
+            "vsa": ["vsa", "volume spread", "volume spread analysis"],
+            "delta": ["delta", "delta analysis"],
+            "ict": ["ict", "inner circle trader"],
+            "price_action": ["price action", "priceaction", "patterns"],
+            "merge": ["merge", "объедини", "финальный"],
+        }
+        
+        for step_name in available_steps:
+            # Check direct step name
+            if step_name.lower() in prompt_lower:
+                detected.append(step_name)
+                continue
+            
+            # Check variations
+            variations = step_variations.get(step_name, [])
+            for variation in variations:
+                if variation in prompt_lower:
+                    detected.append(step_name)
+                    break
+        
+        return detected
     
     def run(
         self,
@@ -95,22 +249,21 @@ class AnalysisPipeline:
             total_cost = 0.0
             model_failures = []  # Track model-related failures
             
+            # Build steps dynamically from config
+            steps = self._build_steps_from_config(config)
+            logger.info(f"built_steps_from_config: run_id={run.id}, step_count={len(steps)}")
+            
             # Run each analysis step
-            for step_name, analyzer in self.steps:
+            for step_name, analyzer, step_config in steps:
                 logger.info(f"running_step: run_id={run.id}, step={step_name}")
                 
-                # Find step configuration
-                step_config = None
-                if config and "steps" in config:
-                    step_config = next(
-                        (s for s in config["steps"] if s.get("step_name") == step_name),
-                        None
-                    )
-                
                 try:
+                    # Build context section if include_context is configured
+                    enhanced_context = self._build_context_for_step(context, step_config, steps)
+                    
                     # Run the step (sync call) with step configuration
                     step_result = analyzer.analyze(
-                        context=context,
+                        context=enhanced_context,
                         llm_client=self.llm_client,
                         step_config=step_config,
                     )

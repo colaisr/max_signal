@@ -33,7 +33,9 @@ interface Run {
 }
 
 async function fetchAnalysisTypes() {
-  const { data } = await axios.get<AnalysisType[]>(`${API_BASE_URL}/api/analyses`)
+  const { data } = await axios.get<AnalysisType[]>(`${API_BASE_URL}/api/analyses`, {
+    withCredentials: true
+  })
   return data
 }
 

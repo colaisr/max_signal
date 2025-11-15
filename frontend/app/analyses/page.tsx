@@ -4,7 +4,9 @@ import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { API_BASE_URL } from '@/lib/config'
+import { useAuth } from '@/hooks/useAuth'
 
 interface AnalysisType {
   id: number
@@ -29,21 +31,51 @@ interface AnalysisType {
     estimated_duration_seconds: number
   }
   is_active: number
+  user_id: number | null
+  is_system: boolean
   created_at: string
   updated_at: string
 }
 
-async function fetchAnalysisTypes() {
-  const { data } = await axios.get<AnalysisType[]>(`${API_BASE_URL}/api/analyses`)
+async function fetchAnalysisTypes(filter?: 'all' | 'my' | 'system') {
+  let url = `${API_BASE_URL}/api/analyses`
+  if (filter === 'my') {
+    url = `${API_BASE_URL}/api/analyses/my`
+  } else if (filter === 'system') {
+    url = `${API_BASE_URL}/api/analyses/system`
+  }
+  const { data } = await axios.get<AnalysisType[]>(url, { withCredentials: true })
+  return data
+}
+
+async function duplicateAnalysisType(id: number) {
+  const { data } = await axios.post(
+    `${API_BASE_URL}/api/analyses/${id}/duplicate`,
+    {},
+    { withCredentials: true }
+  )
   return data
 }
 
 export default function AnalysesPage() {
   const router = useRouter()
-  const { data: analysisTypes = [], isLoading, error } = useQuery({
-    queryKey: ['analysis-types'],
-    queryFn: fetchAnalysisTypes,
+  const { isAuthenticated } = useAuth()
+  const [filter, setFilter] = useState<'all' | 'my' | 'system'>('all')
+  
+  const { data: analysisTypes = [], isLoading, error, refetch } = useQuery({
+    queryKey: ['analysis-types', filter],
+    queryFn: () => fetchAnalysisTypes(filter),
+    enabled: isAuthenticated !== false, // Wait for auth check
   })
+
+  const handleDuplicate = async (id: number) => {
+    try {
+      const duplicated = await duplicateAnalysisType(id)
+      router.push(`/pipelines/${duplicated.id}/edit`)
+    } catch (error: any) {
+      alert(`Failed to duplicate: ${error.response?.data?.detail || error.message}`)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -72,14 +104,58 @@ export default function AnalysesPage() {
   return (
     <div className="p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-            Analysis Types
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Browse and configure available analysis pipelines
-          </p>
+        <div className="mb-6 flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+              Analysis Pipelines
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Browse and configure available analysis pipelines
+            </p>
+          </div>
+          <button
+            onClick={() => router.push('/pipelines/new')}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors"
+          >
+            Create New Pipeline
+          </button>
         </div>
+
+        {/* Filter Tabs */}
+        {isAuthenticated && (
+          <div className="mb-6 flex gap-2 border-b border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-4 py-2 font-medium transition-colors ${
+                filter === 'all'
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              All Pipelines
+            </button>
+            <button
+              onClick={() => setFilter('my')}
+              className={`px-4 py-2 font-medium transition-colors ${
+                filter === 'my'
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              My Pipelines
+            </button>
+            <button
+              onClick={() => setFilter('system')}
+              className={`px-4 py-2 font-medium transition-colors ${
+                filter === 'system'
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              System Pipelines
+            </button>
+          </div>
+        )}
 
         {analysisTypes.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -137,17 +213,42 @@ export default function AnalysesPage() {
                 </div>
 
                 <div className="flex gap-2 mt-auto">
-                  <Link
-                    href={`/analyses/${analysis.id}`}
-                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium text-center transition-colors"
-                  >
-                    Configure
-                  </Link>
+                  {analysis.is_system ? (
+                    <>
+                      <button
+                        onClick={() => handleDuplicate(analysis.id)}
+                        className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors"
+                      >
+                        Duplicate
+                      </button>
+                      <Link
+                        href={`/analyses/${analysis.id}`}
+                        className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium text-center transition-colors"
+                      >
+                        Run
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => router.push(`/pipelines/${analysis.id}/edit`)}
+                        className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors"
+                      >
+                        Edit Pipeline
+                      </button>
+                      <Link
+                        href={`/analyses/${analysis.id}`}
+                        className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium text-center transition-colors"
+                      >
+                        Run
+                      </Link>
+                    </>
+                  )}
                   <button
                     onClick={() => router.push(`/runs?analysis_type_id=${analysis.id}`)}
                     className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-md text-sm font-medium transition-colors"
                   >
-                    View History
+                    History
                   </button>
                 </div>
               </div>

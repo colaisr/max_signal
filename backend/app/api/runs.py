@@ -51,6 +51,8 @@ class RunResponse(BaseModel):
     finished_at: Optional[datetime] = None
     cost_est_total: float = 0.0
     steps: list[RunStepResponse] = []
+    analysis_type_id: Optional[int] = None
+    analysis_type_config: Optional[dict] = None  # Include config to find publishable steps
 
 
 @router.post("", response_model=RunResponse)
@@ -181,7 +183,9 @@ async def create_run(
         created_at=run.created_at,
         finished_at=run.finished_at,
         cost_est_total=run.cost_est_total,
-        steps=[]
+        steps=[],
+        analysis_type_id=run.analysis_type_id,
+        analysis_type_config=None  # Config not needed for initial response
     )
 
 
@@ -214,7 +218,9 @@ async def get_run(run_id: int, db: Session = Depends(get_db)):
         created_at=run.created_at,
         finished_at=run.finished_at,
         cost_est_total=run.cost_est_total,
-        steps=steps
+        steps=steps,
+        analysis_type_id=run.analysis_type_id,
+        analysis_type_config=run.analysis_type.config if run.analysis_type else None
     )
 
 
@@ -243,30 +249,80 @@ async def list_runs(
             created_at=run.created_at,
             finished_at=run.finished_at,
             cost_est_total=run.cost_est_total,
-            steps=[]  # Don't include steps in list view
+            steps=[],  # Don't include steps in list view
+            analysis_type_id=run.analysis_type_id,
+            analysis_type_config=None  # Don't include config in list view
         ))
     
     return result
 
 
 @router.post("/{run_id}/publish")
-async def publish_run(run_id: int, db: Session = Depends(get_db)):
-    """Publish run's final Telegram post to channel."""
+async def publish_run(
+    run_id: int, 
+    step_name: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Publish run's final Telegram post to channel.
+    
+    Args:
+        run_id: Analysis run ID
+        step_name: Optional step name to publish (if not provided, finds publishable step)
+    """
     run = db.query(AnalysisRun).filter(AnalysisRun.id == run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     
-    # Get merge step output (final Telegram post)
-    merge_step = None
-    for step in run.steps:
-        if step.step_name == 'merge':
-            merge_step = step
-            break
+    # Find publishable step
+    publishable_step = None
     
-    if not merge_step or not merge_step.output_blob:
+    if step_name:
+        # User specified a step name
+        for step in run.steps:
+            if step.step_name == step_name:
+                publishable_step = step
+                break
+        if not publishable_step:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Step '{step_name}' not found in run {run_id}"
+            )
+    else:
+        # Find step with publish_to_telegram flag
+        # First, check config for steps with publish_to_telegram: true
+        config = None
+        if run.analysis_type:
+            config = run.analysis_type.config
+        
+        publishable_step_names = []
+        if config and "steps" in config:
+            for step_config in config["steps"]:
+                if step_config.get("publish_to_telegram") == True:
+                    publishable_step_names.append(step_config.get("step_name"))
+        
+        # Find the last publishable step (most recent)
+        if publishable_step_names:
+            # Find steps in reverse order (most recent first)
+            for step in reversed(run.steps):
+                if step.step_name in publishable_step_names:
+                    publishable_step = step
+                    break
+        
+        # Fallback to 'merge' step for backward compatibility
+        if not publishable_step:
+            for step in run.steps:
+                if step.step_name == 'merge':
+                    publishable_step = step
+                    break
+        
+        # If still not found, use the last step
+        if not publishable_step and run.steps:
+            publishable_step = run.steps[-1]
+    
+    if not publishable_step or not publishable_step.output_blob:
         raise HTTPException(
             status_code=400, 
-            detail="Run does not have a final Telegram post. Make sure the merge step completed successfully."
+            detail="Run does not have a publishable step with output. Make sure the step completed successfully."
         )
     
     # Check if already published
@@ -284,13 +340,13 @@ async def publish_run(run_id: int, db: Session = Depends(get_db)):
         }
     
     # Publish to Telegram
-    result = await publish_to_telegram(merge_step.output_blob, db=db)
+    result = await publish_to_telegram(publishable_step.output_blob, db=db)
     
     # Save post record
     from datetime import datetime, timezone
     telegram_post = TelegramPost(
         run_id=run.id,
-        message_text=merge_step.output_blob,
+        message_text=publishable_step.output_blob,
         status=PostStatus.SENT if result['success'] else PostStatus.FAILED,
         message_id=str(result.get('message_ids', [])[0]) if result.get('message_ids') else None,
         sent_at=datetime.now(timezone.utc) if result['success'] else None,

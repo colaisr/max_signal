@@ -27,6 +27,13 @@ interface Run {
   finished_at: string | null
   cost_est_total: number
   steps: RunStep[]
+  analysis_type_id: number | null
+  analysis_type_config: {
+    steps: Array<{
+      step_name: string
+      publish_to_telegram?: boolean
+    }>
+  } | null
 }
 
 async function fetchRun(id: string) {
@@ -132,8 +139,39 @@ export default function RunDetailPage() {
   }
 
   const getFinalPost = () => {
-    const mergeStep = run?.steps.find(s => s.step_name === 'merge')
-    return mergeStep?.output_blob || null
+    if (!run) return null
+    
+    // Find publishable steps from config
+    let publishableStepNames: string[] = []
+    if (run.analysis_type_config && run.analysis_type_config.steps) {
+      publishableStepNames = run.analysis_type_config.steps
+        .filter(s => s.publish_to_telegram === true)
+        .map(s => s.step_name)
+    }
+    
+    // Find publishable step (prefer configured ones, fallback to merge)
+    let publishableStep = null
+    if (publishableStepNames.length > 0) {
+      // Find the last publishable step (most recent)
+      for (let i = run.steps.length - 1; i >= 0; i--) {
+        if (publishableStepNames.includes(run.steps[i].step_name)) {
+          publishableStep = run.steps[i]
+          break
+        }
+      }
+    }
+    
+    // Fallback to merge step for backward compatibility
+    if (!publishableStep) {
+      publishableStep = run.steps.find(s => s.step_name === 'merge')
+    }
+    
+    // If still not found, use the last step
+    if (!publishableStep && run.steps.length > 0) {
+      publishableStep = run.steps[run.steps.length - 1]
+    }
+    
+    return publishableStep?.output_blob || null
   }
 
   const publishMutation = useMutation({
@@ -256,12 +294,48 @@ export default function RunDetailPage() {
         </div>
 
         {/* Final Telegram Post Preview */}
-        {finalPost && run.status === 'succeeded' && (
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg shadow-lg p-6 mb-6 border-2 border-blue-200 dark:border-blue-800">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                📱 Final Telegram Post
-              </h2>
+        {finalPost && run.status === 'succeeded' && (() => {
+          // Find which step is being shown
+          let publishableStepNames: string[] = []
+          if (run.analysis_type_config && run.analysis_type_config.steps) {
+            publishableStepNames = run.analysis_type_config.steps
+              .filter(s => s.publish_to_telegram === true)
+              .map(s => s.step_name)
+          }
+          
+          let shownStep = null
+          if (publishableStepNames.length > 0) {
+            for (let i = run.steps.length - 1; i >= 0; i--) {
+              if (publishableStepNames.includes(run.steps[i].step_name)) {
+                shownStep = run.steps[i]
+                break
+              }
+            }
+          }
+          if (!shownStep) {
+            shownStep = run.steps.find(s => s.step_name === 'merge') || run.steps[run.steps.length - 1]
+          }
+          
+          const multiplePublishable = publishableStepNames.length > 1
+          
+          return (
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg shadow-lg p-6 mb-6 border-2 border-blue-200 dark:border-blue-800">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                    📱 Final Telegram Post
+                  </h2>
+                  {shownStep && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Showing output from: <span className="font-medium">{shownStep.step_name}</span> step
+                    </p>
+                  )}
+                  {multiplePublishable && (
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                      ⚠️ {publishableStepNames.length} steps are marked for publishing. Only the last one is shown.
+                    </p>
+                  )}
+                </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => copyToClipboard(finalPost)}
@@ -307,7 +381,8 @@ export default function RunDetailPage() {
               Ready to publish to Telegram channel
             </p>
           </div>
-        )}
+          )
+        })()}
 
         {/* Analysis Steps Timeline */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -325,13 +400,19 @@ export default function RunDetailPage() {
             <div className="space-y-3">
               {run.steps.map((step, index) => {
                 const isExpanded = expandedSteps.has(step.step_name)
+                // Check if this step is publishable
+                const isPublishable = run.analysis_type_config?.steps?.find(
+                  s => s.step_name === step.step_name && s.publish_to_telegram === true
+                ) || step.step_name === 'merge' // Fallback for backward compatibility
+                
                 const stepNames: Record<string, string> = {
                   wyckoff: '1️⃣ Wyckoff Analysis',
                   smc: '2️⃣ Smart Money Concepts (SMC)',
                   vsa: '3️⃣ Volume Spread Analysis (VSA)',
                   delta: '4️⃣ Delta Analysis',
                   ict: '5️⃣ ICT Analysis',
-                  merge: '6️⃣ Merge & Telegram Post',
+                  price_action: '6️⃣ Price Action / Patterns',
+                  merge: '7️⃣ Merge & Telegram Post',
                 }
                 const stepLabel = stepNames[step.step_name] || step.step_name
 
@@ -349,6 +430,11 @@ export default function RunDetailPage() {
                         <span className="text-lg font-semibold text-gray-900 dark:text-white">
                           {stepLabel}
                         </span>
+                        {isPublishable && (
+                          <span className="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded text-green-600 dark:text-green-400">
+                            📤 Publishable
+                          </span>
+                        )}
                         {step.llm_model && (
                           <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
                             {step.llm_model}

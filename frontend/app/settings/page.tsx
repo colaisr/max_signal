@@ -77,7 +77,10 @@ interface AnalysisType {
 }
 
 async function fetchAnalysisTypes() {
-  const { data } = await axios.get<AnalysisType[]>(`${API_BASE_URL}/api/analyses`)
+  // Only fetch system pipelines for settings page
+  const { data } = await axios.get<AnalysisType[]>(`${API_BASE_URL}/api/analyses/system`, {
+    withCredentials: true
+  })
   return data
 }
 

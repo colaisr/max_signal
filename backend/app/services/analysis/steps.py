@@ -50,20 +50,29 @@ def format_user_prompt_template(template: str, context: Dict[str, Any], step_con
     # For merge step, use full outputs; for other steps, truncate for context
     is_merge_step = "объедини" in template.lower() or "merge" in template.lower() or "финальный пост" in template.lower()
     
-    wyckoff_output = previous_steps.get("wyckoff", {}).get("output", "Не доступно")
-    if not is_merge_step and len(wyckoff_output) > 100:
-        wyckoff_output = wyckoff_output[:100] + "..."
+    # Build format dict with standard variables
+    format_dict = {
+        "instrument": instrument,
+        "timeframe": timeframe,
+        "market_data_summary": market_data_summary,
+    }
     
-    smc_output = previous_steps.get("smc", {}).get("output", "Не доступно")
-    if not is_merge_step and len(smc_output) > 100:
-        smc_output = smc_output[:100] + "..."
+    # Add all previous step outputs dynamically (supports custom step names)
+    # First add standard step outputs for backward compatibility
+    standard_steps = ["wyckoff", "smc", "vsa", "delta", "ict", "price_action"]
+    for step_name in standard_steps:
+        step_output = previous_steps.get(step_name, {}).get("output", "Не доступно")
+        if not is_merge_step and len(step_output) > 100:
+            step_output = step_output[:100] + "..."
+        format_dict[f"{step_name}_output"] = step_output
     
-    vsa_output = previous_steps.get("vsa", {}).get("output", "Не доступно")
-    delta_output = previous_steps.get("delta", {}).get("output", "Не доступно")
-    ict_output = previous_steps.get("ict", {}).get("output", "Не доступно")
-    price_action_output = previous_steps.get("price_action", {}).get("output", "Не доступно")
-    if not is_merge_step and len(price_action_output) > 100:
-        price_action_output = price_action_output[:100] + "..."
+    # Add any other step outputs dynamically (for custom steps)
+    for step_name, step_result in previous_steps.items():
+        if step_name not in standard_steps:
+            step_output = step_result.get("output", "Не доступно")
+            if not is_merge_step and len(step_output) > 100:
+                step_output = step_output[:100] + "..."
+            format_dict[f"{step_name}_output"] = step_output
     
     # Replace hardcoded "last X candles" text in template with actual num_candles value
     # This handles cases where templates have hardcoded text like "last 20 candles"
@@ -85,17 +94,25 @@ def format_user_prompt_template(template: str, context: Dict[str, Any], step_con
         )
     
     # Format template with all variables
-    formatted = template.format(
-        instrument=instrument,
-        timeframe=timeframe,
-        market_data_summary=market_data_summary,
-        wyckoff_output=wyckoff_output,
-        smc_output=smc_output,
-        vsa_output=vsa_output,
-        delta_output=delta_output,
-        ict_output=ict_output,
-        price_action_output=price_action_output,
-    )
+    try:
+        formatted = template.format(**format_dict)
+    except KeyError as e:
+        # Provide helpful error message for invalid variables
+        invalid_var = str(e).strip("'")
+        available_vars = ['instrument', 'timeframe', 'market_data_summary']
+        # Add standard step outputs
+        available_vars.extend([f'{step}_output' for step in standard_steps])
+        # Add any custom step outputs
+        for step_name in previous_steps.keys():
+            if step_name not in standard_steps:
+                available_vars.append(f'{step_name}_output')
+        
+        raise ValueError(
+            f"Invalid variable '{invalid_var}' in prompt template. "
+            f"Available variables: {', '.join(sorted(set(available_vars)))}. "
+            f"Use {{instrument}} for instrument symbol, {{timeframe}} for timeframe, "
+            f"and {{step_name}}_output for any previous step output."
+        )
     
     return formatted
 
@@ -147,6 +164,17 @@ class BaseAnalyzer:
             else:
                 user_prompt = self.build_user_prompt(context, step_config)
             
+            # Inject included context if present
+            included_context = context.get("_included_context")
+            if included_context:
+                context_text = included_context.get("text", "")
+                placement = included_context.get("placement", "before")
+                
+                if placement == "before":
+                    user_prompt = f"{context_text}\n\n{user_prompt}"
+                else:  # after
+                    user_prompt = f"{user_prompt}\n\n{context_text}"
+            
             model = step_config.get("model")
             temperature = step_config.get("temperature", 0.7)
             max_tokens = step_config.get("max_tokens")
@@ -154,6 +182,18 @@ class BaseAnalyzer:
             # Fall back to hardcoded prompts (backward compatibility)
             system_prompt = self.get_system_prompt()
             user_prompt = self.build_user_prompt(context, None)
+            
+            # Inject included context if present (for backward compatibility)
+            included_context = context.get("_included_context")
+            if included_context:
+                context_text = included_context.get("text", "")
+                placement = included_context.get("placement", "before")
+                
+                if placement == "before":
+                    user_prompt = f"{context_text}\n\n{user_prompt}"
+                else:  # after
+                    user_prompt = f"{user_prompt}\n\n{context_text}"
+            
             model = None
             temperature = 0.7
             max_tokens = None

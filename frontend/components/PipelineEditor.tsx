@@ -75,7 +75,7 @@ async function fetchAnalysisType(id: number) {
 async function createPipeline(request: {
   name: string
   display_name: string
-  description?: string
+  description?: string | null
   config: PipelineConfig
 }) {
   const { data } = await axios.post(
@@ -88,7 +88,7 @@ async function createPipeline(request: {
 
 async function updatePipeline(id: number, request: {
   display_name?: string
-  description?: string
+  description?: string | null
   config?: PipelineConfig
 }) {
   const { data } = await axios.put(
@@ -176,7 +176,7 @@ export default function PipelineEditor({ pipelineId }: PipelineEditorProps) {
   })
 
   const updateMutation = useMutation({
-    mutationFn: (request: { display_name?: string; description?: string; config?: PipelineConfig }) =>
+    mutationFn: (request: { display_name?: string; description?: string | null; config?: PipelineConfig }) =>
       updatePipeline(pipelineId!, request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['analysis-types'] })

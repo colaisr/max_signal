@@ -93,6 +93,7 @@ class AnalysisPipeline:
             }
             
             total_cost = 0.0
+            model_failures = []  # Track model-related failures
             
             # Run each analysis step
             for step_name, analyzer in self.steps:
@@ -137,21 +138,55 @@ class AnalysisPipeline:
                         f"tokens={step_result.get('tokens_used', 0)}, cost={step_result.get('cost_est', 0.0)}"
                     )
                 except Exception as e:
-                    logger.error(f"step_failed: run_id={run.id}, step={step_name}, error={str(e)}")
+                    error_msg = str(e)
+                    error_type = type(e).__name__
+                    logger.error(f"step_failed: run_id={run.id}, step={step_name}, error={error_msg}")
+                    
+                    # Check if this is a model-related error
+                    is_model_error = (
+                        "429" in error_msg or  # Rate limit
+                        "404" in error_msg or  # Model not found
+                        "model" in error_msg.lower() and ("not found" in error_msg.lower() or "invalid" in error_msg.lower()) or
+                        "rate" in error_msg.lower() and "limit" in error_msg.lower() or
+                        "RateLimitError" in error_type
+                    )
+                    
+                    if is_model_error:
+                        model_name = step_config.get("model") if step_config else "unknown"
+                        model_failures.append({
+                            "step": step_name,
+                            "model": model_name,
+                            "error": error_msg,
+                            "error_type": error_type
+                        })
+                    
                     # Save error step
                     error_step = AnalysisStep(
                         run_id=run.id,
                         step_name=step_name,
-                        input_blob={"error": str(e)},
-                        output_blob=f"Error: {str(e)}",
+                        input_blob={"error": error_msg, "error_type": error_type, "is_model_error": is_model_error},
+                        output_blob=f"Error: {error_msg}",
                     )
                     db.add(error_step)
                     db.commit()
                     # Continue with next step instead of failing completely
                     continue
             
-            # Update run status
-            run.status = RunStatus.SUCCEEDED
+            # Determine final status based on failures
+            if model_failures:
+                # Set status to MODEL_FAILURE if we have model errors but pipeline completed
+                run.status = RunStatus.MODEL_FAILURE
+                # Store failure details in a special step for easy retrieval
+                failure_step = AnalysisStep(
+                    run_id=run.id,
+                    step_name="model_failures",
+                    input_blob={"failures": model_failures},
+                    output_blob=f"Model failures detected: {len(model_failures)} step(s) failed due to model errors",
+                )
+                db.add(failure_step)
+            else:
+                run.status = RunStatus.SUCCEEDED
+            
             run.finished_at = datetime.now(timezone.utc)
             run.cost_est_total = total_cost
             db.commit()

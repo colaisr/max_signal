@@ -5,6 +5,7 @@ import axios from 'axios'
 import { useParams, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { API_BASE_URL } from '@/lib/config'
+import Tooltip from '@/components/Tooltip'
 
 interface RunStep {
   step_name: string
@@ -75,6 +76,8 @@ export default function RunDetailPage() {
         return 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
       case 'failed':
         return 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
+      case 'model_failure':
+        return 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20'
       case 'running':
         return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
       case 'queued':
@@ -82,6 +85,34 @@ export default function RunDetailPage() {
       default:
         return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800'
     }
+  }
+
+  // Extract model failure errors from steps
+  const getModelFailureMessage = (run: Run): string | null => {
+    if (run.status !== 'model_failure') return null
+    
+    // Look for model_failures step
+    const failureStep = run.steps.find(s => s.step_name === 'model_failures')
+    if (failureStep && failureStep.input_blob?.failures) {
+      const failures = failureStep.input_blob.failures
+      if (failures.length > 0) {
+        const firstFailure = failures[0]
+        return `${firstFailure.step} step failed: ${firstFailure.model} - ${firstFailure.error.split('\n')[0]}`
+      }
+    }
+    
+    // Fallback: look for steps with model errors
+    const errorSteps = run.steps.filter(s => 
+      s.input_blob?.is_model_error || 
+      (s.output_blob && s.output_blob.includes('Error:'))
+    )
+    if (errorSteps.length > 0) {
+      const firstError = errorSteps[0]
+      const errorMsg = firstError.output_blob?.replace('Error: ', '') || 'Model error'
+      return `${firstError.step_name} step: ${errorMsg.split('\n')[0]}`
+    }
+    
+    return null
   }
 
   const toggleStep = (stepName: string) => {
@@ -197,9 +228,23 @@ export default function RunDetailPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
-              <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(run.status)}`}>
-                {run.status}
-              </span>
+              {(() => {
+                const failureMessage = getModelFailureMessage(run)
+                const statusBadge = (
+                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(run.status)}`}>
+                    {run.status === 'model_failure' ? 'Model Failure' : run.status}
+                  </span>
+                )
+                
+                if (failureMessage) {
+                  return (
+                    <Tooltip content={failureMessage} position="top">
+                      {statusBadge}
+                    </Tooltip>
+                  )
+                }
+                return statusBadge
+              })()}
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Created</p>

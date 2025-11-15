@@ -44,6 +44,8 @@ function RunsContent() {
         return 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
       case 'failed':
         return 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
+      case 'model_failure':
+        return 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20'
       case 'running':
         return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
       case 'queued':
@@ -142,7 +144,7 @@ function RunsContent() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(run.status)}`}>
-                          {run.status}
+                          {run.status === 'model_failure' ? 'Model Failure' : run.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">

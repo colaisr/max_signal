@@ -134,11 +134,20 @@ export default function DashboardPage() {
         return 'text-green-600 dark:text-green-400'
       case 'failed':
         return 'text-red-600 dark:text-red-400'
+      case 'model_failure':
+        return 'text-orange-600 dark:text-orange-400'
       case 'running':
         return 'text-blue-600 dark:text-blue-400'
+      case 'queued':
+        return 'text-yellow-600 dark:text-yellow-400'
       default:
         return 'text-gray-600 dark:text-gray-400'
     }
+  }
+
+  const getStatusDisplayName = (status: string) => {
+    if (status === 'model_failure') return 'Model Failure'
+    return status
   }
 
   if (authLoading) {
@@ -313,7 +322,7 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`text-sm font-medium ${getStatusColor(run.status)}`}>
-                          {run.status}
+                          {getStatusDisplayName(run.status)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">

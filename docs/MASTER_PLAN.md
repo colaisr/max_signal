@@ -222,6 +222,39 @@ Constraints and preferences:
   - **User Preferences**: Profile, theme, timezone, notifications
   - **System** (admin): Feature flags, cost limits
 
+**Pipeline Editor (`/pipelines/new` and `/pipelines/{id}/edit`):**
+- **Purpose**: Allow users to create and manage custom analysis pipelines with full control over step configuration, ordering, and context dependencies
+- **Access**: All authenticated users can create/edit their own pipelines; admins can also edit system pipelines via Settings
+- **Key Features**:
+  - **Pipeline Metadata**: Name, description, default instrument, default timeframe
+  - **Step Management**: Add, remove, reorder steps via drag-and-drop
+  - **Step Configuration**: Each step can be configured with:
+    - Step name (unique identifier)
+    - System prompt (role definition)
+    - User prompt template (with variable support: `{instrument}`, `{timeframe}`, `{market_data_summary}`, `{step_name}_output`)
+    - LLM model selection (with failure indicators)
+    - Temperature and max tokens
+    - Number of candles (for market data steps)
+    - Context inclusion (optional): Select which previous steps to include, placement (before/after prompt), format (summary/full)
+    - Publish to Telegram flag (any step can be publishable)
+  - **Variable Palette**: Click-to-insert variable palette showing:
+    - Standard variables: `{instrument}`, `{timeframe}`, `{market_data_summary}`
+    - Previous step outputs: `{step_name}_output` (dynamically generated for all preceding steps)
+  - **Smart Validation**: 
+    - Detects broken variable references when steps are reordered
+    - Warns if steps reference outputs from steps that come after them
+    - Shows warnings in real-time during drag-and-drop
+    - Confirmation dialogs with Cancel option when saving invalid configurations
+  - **Context Management**: 
+    - Checkbox-based context inclusion (no template syntax required)
+    - Visual indicators for invalid context references
+    - Auto-updates context dependencies when steps are reordered
+  - **Publishing**: 
+    - Any step can be marked as publishable to Telegram
+    - Warning shown if multiple steps are marked (only last one will be published)
+    - Visual indicators show which step will be published
+  - **Save/Cancel**: Save creates/updates pipeline; Cancel navigates back to analyses list
+
 **Design Patterns:**
 - Left sidebar navigation (or top nav bar for MVP)
 - Dark-first theme
@@ -234,6 +267,8 @@ Constraints and preferences:
 - Instrument filtering hints ("Показаны только инструменты, подходящие для данного типа анализа")
 - Custom Select component for model dropdowns (cross-platform compatibility, proper failure indicators)
 - Tooltip components for error messages (Bootstrap-like styling with Tailwind CSS)
+- Drag-and-drop step reordering with visual feedback
+- Warning dialogs with Cancel buttons for validation errors
 
 
 ### 4) Analysis Types and Pipelines
@@ -262,6 +297,95 @@ All analysis types use the same 6-7 step pipeline:
   - Crypto Analysis → crypto type only
   - Equity Analysis → equity type, excluding MOEX
   - Daystart → all instruments
+
+### 4e) User-Created Pipelines (Pipeline Editor)
+
+**Overview:**
+Users can create, edit, and manage their own custom analysis pipelines using the Pipeline Editor. This enables maximum flexibility - users can build any pipeline workflow, not just trading-related ones.
+
+**Architecture:**
+- **Database Schema**: 
+  - `analysis_types` table includes `user_id` (nullable, FK to users) and `is_system` (boolean) columns
+  - System pipelines (`is_system=true`, `user_id=NULL`) are predefined templates
+  - User pipelines (`is_system=false`, `user_id=current_user.id`) are custom pipelines
+- **Step Configuration Structure**:
+  - Each step has: `step_name`, `order`, `system_prompt`, `user_prompt_template`, `model`, `temperature`, `max_tokens`, `num_candles`, `include_context`, `publish_to_telegram`
+  - Steps are stored as JSON array in `analysis_types.config.steps`
+  - Steps sorted by `order` field during execution
+- **Dynamic Execution**:
+  - Pipeline builds step list dynamically from config (not hardcoded)
+  - Steps mapped to analyzer classes: standard steps (Wyckoff, SMC, etc.) use specific analyzers; custom steps use `GenericLLMAnalyzer`
+  - Context inclusion: Steps can optionally include output from previous steps via `include_context` config
+  - Publishing: Any step can be publishable (marked with `publish_to_telegram: true`)
+
+**Key Features:**
+1. **Step Flexibility**: All steps are generic LLM calls - no functional difference except prompts
+2. **Context Management**: 
+   - Steps can reference previous step outputs via `{step_name}_output` variables
+   - Optional context inclusion via checkboxes (no template syntax required)
+   - Smart detection: Automatically detects step references in prompts
+   - Manual override: Users can manually select which steps to include
+3. **Step Reordering**: 
+   - Drag-and-drop UI for reordering steps
+   - Real-time validation: Warns if reordering breaks variable references
+   - Auto-updates context dependencies when steps are reordered
+4. **Variable System**:
+   - Standard variables: `{instrument}`, `{timeframe}`, `{market_data_summary}`
+   - Dynamic variables: `{step_name}_output` for any previous step
+   - Variable palette: Click-to-insert UI showing all available variables
+   - Validation: Checks variable references on save/reorder
+5. **Publishing Flexibility**:
+   - Any step can be marked as publishable to Telegram
+   - No special "Merge" step type - users create their own final steps
+   - If multiple steps are publishable, only the last one is published (with warning)
+
+**Access Control:**
+- **System Pipelines**: Read-only for regular users (can duplicate, can't edit)
+- **User Pipelines**: Full edit access (only by owner)
+- **Admin**: Can edit any pipeline (system or user)
+- **Duplicate**: Users can duplicate system pipelines to create their own copies
+
+**Navigation Flow:**
+- `/analyses` → "Create New Pipeline" button → `/pipelines/new` (fresh empty pipeline)
+- `/analyses` → Click user pipeline → "Edit Pipeline" → `/pipelines/{id}/edit`
+- `/analyses` → Click system pipeline → "Duplicate" → Creates user copy → `/pipelines/{id}/edit`
+- `/settings` → "Analysis Types Configuration" → Edit system pipeline defaults (admin-only)
+
+**Backend Implementation:**
+- **API Endpoints**:
+  - `GET /api/analyses` - List all pipelines (filtered by `user_id`, `is_system`)
+  - `GET /api/analyses/my` - List user's own pipelines
+  - `GET /api/analyses/system` - List system pipelines
+  - `POST /api/analyses` - Create new user pipeline
+  - `PUT /api/analyses/{id}` - Update pipeline (with access control)
+  - `DELETE /api/analyses/{id}` - Delete pipeline (with access control)
+  - `POST /api/analyses/{id}/duplicate` - Duplicate pipeline (creates user copy)
+- **Pipeline Execution**:
+  - `AnalysisPipeline` class builds steps dynamically from config
+  - Steps sorted by `order` field before execution
+  - Context built from previous step outputs based on `include_context` config
+  - Publishing finds steps with `publish_to_telegram: true` (fallback to "merge" for backward compatibility)
+
+**Migration:**
+- Existing analysis types migrated to include:
+  - `order` field for each step (1-indexed)
+  - `publish_to_telegram: true` for merge steps
+  - `include_context` for ICT steps (references Wyckoff + SMC)
+  - `include_context` for merge steps (references all previous steps)
+  - All existing analyses marked as `is_system: true`
+
+**Use Cases:**
+1. **Custom Trading Pipelines**: Users create specialized analysis workflows for their trading style
+2. **Non-Trading Pipelines**: Users can build any LLM workflow (translation, content generation, etc.)
+3. **Pipeline Templates**: System pipelines serve as templates that users can duplicate and customize
+4. **Experimental Workflows**: Users can experiment with different step orders and configurations
+
+**Future Enhancements:**
+- Pipeline sharing between users
+- Pipeline versioning/history
+- Pipeline templates marketplace
+- Advanced context formatting options
+- Step validation and quality checks
 
 ### 4a) Daystart Analysis Pipeline (Original MVP Feature)
 
@@ -677,6 +801,7 @@ All analysis types use the same 6-7 step pipeline:
 - [x] Model Failure Tracking ✅ (Completed: `has_failures` field added to `available_models` table, automatic marking when model errors occur, visual indicators in dropdowns and settings page, custom Select component for cross-platform support, sync logic preserves failure status, `model_failure` run status with tooltips)
 - [x] Analysis Types Configuration Editing ✅ (Completed: Settings page section listing all analysis types, edit page at `/settings/analyses/{id}` for editing default configurations, API endpoint `PUT /api/analyses/{id}/config`, editable step configurations (models, prompts, temperature, max_tokens, num_candles), default timeframe and instrument editing, reset and save functionality)
 - [x] Configurable Candle Counts ✅ (Completed: Added `num_candles` field to step config, editable in analysis detail page and Settings, prompt text dynamically updates to match configured number, migration added default values to all existing analysis types, backward compatible with defaults)
+- [x] Pipeline Editor ✅ (Completed: User-created pipelines, drag-and-drop step reordering, context management, variable system, dynamic pipeline execution, access control, duplicate functionality, validation and warnings, see Section 4e for details)
 - [ ] Scheduling
 - [x] Deployment (single VM) ✅ (Scripts and documentation ready - see `docs/PRODUCTION_DEPLOYMENT.md`)
 - [ ] Backtesting (Phase 2)

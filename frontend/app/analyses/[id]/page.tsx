@@ -213,6 +213,23 @@ export default function AnalysisDetailPage() {
     setEditableConfig(newConfig)
   }
 
+  const applyModelToAllSteps = (modelName: string) => {
+    if (!editableConfig) return
+    const newConfig = JSON.parse(JSON.stringify(editableConfig))
+    newConfig.steps = newConfig.steps.map((step: StepConfig) => ({
+      ...step,
+      model: modelName
+    }))
+    setEditableConfig(newConfig)
+  }
+
+  const isModelChangedFromDefault = (stepIndex: number): boolean => {
+    if (!editableConfig || !analysis) return false
+    const currentModel = editableConfig.steps[stepIndex]?.model
+    const defaultModel = analysis.config.steps[stepIndex]?.model
+    return currentModel !== defaultModel
+  }
+
   const resetConfig = () => {
     if (analysis) {
       setEditableConfig(JSON.parse(JSON.stringify(analysis.config)))
@@ -395,6 +412,14 @@ export default function AnalysisDetailPage() {
                                         <span>⚠️</span>
                                         <span>This model has recorded failures and may not work reliably</span>
                                       </p>
+                                    )}
+                                    {isModelChangedFromDefault(index) && (
+                                      <button
+                                        onClick={() => applyModelToAllSteps(step.model)}
+                                        className="mt-2 px-3 py-1 text-xs bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded transition-colors"
+                                      >
+                                        Apply to all steps
+                                      </button>
                                     )}
                                   </div>
                                 ) : (

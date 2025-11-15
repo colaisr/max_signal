@@ -69,6 +69,8 @@ Constraints and preferences:
 
 - Core services
   - Data adapters: normalized OHLCV fetch; light feature extraction (structure hints, volume stats if available)
+    - All adapters sort candles by timestamp (oldest → newest) before returning to ensure "last N candles" are always the most recent by time
+    - Number of candles per analysis step: Wyckoff (20), SMC/ICT (50), VSA/Delta (30), default (30)
   - Agent orchestrator: runs intrasteps (Wyckoff, SMC, VSA, Delta, ICT) using stable prompts and tool schemas; then merges into final Telegram post
     - Model failure detection: automatically detects model errors (429 rate limits, 404 not found, invalid model)
     - Failure marking: marks failed models with `has_failures=True` in database
@@ -416,6 +418,11 @@ All analysis types use the same 6-7 step pipeline:
 - `data_cache` table for short-lived cache to reduce repeated fetches
 - Instrument routing: `DataService` automatically selects adapter based on `exchange` field in `instruments` table
 - Exchange detection: Automatic identification of NYMEX/CME/NASDAQ/NYSE/MOEX based on symbol patterns
+- **Candle Sorting**: All adapters explicitly sort candles by timestamp (oldest → newest) before returning data
+  - Ensures "last N candles" operations always return the most recent candles by time
+  - Works regardless of API response order
+  - Analysis steps also sort candles as a safety measure before slicing
+  - Number of candles per step: Wyckoff (20), SMC/ICT (50), VSA/Delta (30), default (30)
 
 
 ### 7) Scheduling

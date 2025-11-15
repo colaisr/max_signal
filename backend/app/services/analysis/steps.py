@@ -30,7 +30,9 @@ def format_user_prompt_template(template: str, context: Dict[str, Any]) -> str:
         elif "smc" in template.lower() or "ict" in template.lower():
             num_candles = 50
         
-        candles_to_show = market_data.candles[-num_candles:] if len(market_data.candles) > num_candles else market_data.candles
+        # Ensure candles are sorted by timestamp (oldest first) before taking last N
+        sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
+        candles_to_show = sorted_candles[-num_candles:] if len(sorted_candles) > num_candles else sorted_candles
         for candle in candles_to_show:
             market_data_summary += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: O={candle.open:.2f} H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f} V={candle.volume:.2f}\n"
     
@@ -157,11 +159,13 @@ class WyckoffAnalyzer(BaseAnalyzer):
         timeframe = context["timeframe"]
         
         # Build prompt with market data summary
+        # Ensure candles are sorted by timestamp (oldest first) before taking last 20
+        sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         prompt = f"""Analyze {instrument} on {timeframe} timeframe using Wyckoff Method.
 
 Recent price action (last 20 candles):
 """
-        for candle in market_data.candles[-20:]:
+        for candle in sorted_candles[-20:]:
             prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: O={candle.open:.2f} H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f} V={candle.volume:.2f}\n"
         
         prompt += """
@@ -189,11 +193,13 @@ class SMCAnalyzer(BaseAnalyzer):
         instrument = context["instrument"]
         timeframe = context["timeframe"]
         
+        # Ensure candles are sorted by timestamp (oldest first) before taking last 50
+        sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         prompt = f"""Analyze {instrument} on {timeframe} using Smart Money Concepts.
 
 Price structure (last 50 candles):
 """
-        for candle in market_data.candles[-50:]:
+        for candle in sorted_candles[-50:]:
             prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: O={candle.open:.2f} H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f}\n"
         
         prompt += """
@@ -222,11 +228,13 @@ class VSAAnalyzer(BaseAnalyzer):
         instrument = context["instrument"]
         timeframe = context["timeframe"]
         
+        # Ensure candles are sorted by timestamp (oldest first) before taking last 30
+        sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         prompt = f"""Analyze {instrument} on {timeframe} using Volume Spread Analysis.
 
 OHLCV data (last 30 candles):
 """
-        for candle in market_data.candles[-30:]:
+        for candle in sorted_candles[-30:]:
             spread = candle.high - candle.low
             prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: Spread={spread:.2f} Volume={candle.volume:.2f} Close={candle.close:.2f}\n"
         
@@ -264,7 +272,9 @@ Note: Full delta requires order flow data. Analyze buying/selling pressure from 
 
 Price and volume data (last 30 candles):
 """
-        for candle in market_data.candles[-30:]:
+        # Ensure candles are sorted by timestamp (oldest first) before taking last 30
+        sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
+        for candle in sorted_candles[-30:]:
             body = abs(candle.close - candle.open)
             is_bullish = candle.close > candle.open
             prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: {'Bullish' if is_bullish else 'Bearish'} Body={body:.2f} Volume={candle.volume:.2f}\n"
@@ -297,11 +307,13 @@ class ICTAnalyzer(BaseAnalyzer):
         wyckoff_result = context["previous_steps"].get("wyckoff", {})
         smc_result = context["previous_steps"].get("smc", {})
         
+        # Ensure candles are sorted by timestamp (oldest first) before taking last 50
+        sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         prompt = f"""Analyze {instrument} on {timeframe} using ICT methodology.
 
 Price action (last 50 candles):
 """
-        for candle in market_data.candles[-50:]:
+        for candle in sorted_candles[-50:]:
             prompt += f"- {candle.timestamp.strftime('%Y-%m-%d %H:%M')}: H={candle.high:.2f} L={candle.low:.2f} C={candle.close:.2f}\n"
         
         prompt += f"""
@@ -335,11 +347,13 @@ class PriceActionAnalyzer(BaseAnalyzer):
         instrument = context["instrument"]
         timeframe = context["timeframe"]
         
+        # Ensure candles are sorted by timestamp (oldest first) before taking last 50
+        sorted_candles = sorted(market_data.candles, key=lambda c: c.timestamp)
         prompt = f"""Analyze {instrument} on {timeframe} using Price Action and Pattern Analysis.
 
 Price action (last 50 candles):
 """
-        for candle in market_data.candles[-50:]:
+        for candle in sorted_candles[-50:]:
             body = abs(candle.close - candle.open)
             is_bullish = candle.close > candle.open
             upper_wick = candle.high - max(candle.open, candle.close)

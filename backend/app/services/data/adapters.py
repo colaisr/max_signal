@@ -125,6 +125,11 @@ class CCXTAdapter(DataAdapter):
                     volume=candle[5]
                 ))
             
+            # Sort by timestamp (oldest first) to ensure correct order
+            candles.sort(key=lambda c: c.timestamp)
+            # Take last N candles (most recent)
+            candles = candles[-limit:] if len(candles) > limit else candles
+            
             return MarketData(
                 instrument=instrument,
                 timeframe=timeframe,
@@ -230,7 +235,7 @@ class YFinanceAdapter(DataAdapter):
             if df.empty:
                 raise ValueError(f"No data available for {instrument} (tried {normalized_instrument})")
             
-            # Limit results
+            # Limit results (tail gets last N, which should be most recent)
             df = df.tail(limit)
             
             # Convert to normalized format
@@ -244,6 +249,11 @@ class YFinanceAdapter(DataAdapter):
                     close=float(row['Close']),
                     volume=float(row['Volume'])
                 ))
+            
+            # Sort by timestamp (oldest first) to ensure correct order
+            candles.sort(key=lambda c: c.timestamp)
+            # Take last N candles (most recent) - safety check in case tail didn't work as expected
+            candles = candles[-limit:] if len(candles) > limit else candles
             
             return MarketData(
                 instrument=instrument,  # Keep original symbol for display
@@ -456,7 +466,7 @@ class TinkoffAdapter(DataAdapter):
                 
                 # Convert to normalized format
                 candles = []
-                for candle in candles_response.candles[-limit:]:  # Take last N candles
+                for candle in candles_response.candles:
                     # Tinkoff uses units.nano format for prices
                     def convert_price(price_obj):
                         if hasattr(price_obj, 'units') and hasattr(price_obj, 'nano'):
@@ -471,6 +481,11 @@ class TinkoffAdapter(DataAdapter):
                         close=convert_price(candle.close),
                         volume=candle.volume
                     ))
+                
+                # Sort by timestamp (oldest first) to ensure correct order
+                candles.sort(key=lambda c: c.timestamp)
+                # Take last N candles (most recent)
+                candles = candles[-limit:] if len(candles) > limit else candles
                 
                 return MarketData(
                     instrument=instrument,

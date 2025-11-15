@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { useRequireAuth, useAuth } from '@/hooks/useAuth'
 import { API_BASE_URL } from '@/lib/config'
 
@@ -45,6 +46,38 @@ async function fetchModels() {
 
 async function fetchDataSources() {
   const { data } = await axios.get<DataSource[]>(`${API_BASE_URL}/api/settings/data-sources`)
+  return data
+}
+
+interface AnalysisType {
+  id: number
+  name: string
+  display_name: string
+  description: string | null
+  version: string
+  config: {
+    steps: Array<{
+      step_name: string
+      step_type: string
+      model: string
+      system_prompt: string
+      user_prompt_template: string
+      temperature: number
+      max_tokens: number
+      data_sources: string[]
+    }>
+    default_instrument: string
+    default_timeframe: string
+    estimated_cost: number
+    estimated_duration_seconds: number
+  }
+  is_active: number
+  created_at: string
+  updated_at: string
+}
+
+async function fetchAnalysisTypes() {
+  const { data } = await axios.get<AnalysisType[]>(`${API_BASE_URL}/api/analyses`)
   return data
 }
 
@@ -132,6 +165,7 @@ async function toggleInstrument(symbol: string) {
 }
 
 export default function SettingsPage() {
+  const router = useRouter()
   const { isLoading: authLoading } = useRequireAuth()
   const { isAdmin } = useAuth()
   const queryClient = useQueryClient()
@@ -160,6 +194,11 @@ export default function SettingsPage() {
   const { data: dataSources = [], isLoading: dataSourcesLoading } = useQuery({
     queryKey: ['settings', 'data-sources'],
     queryFn: fetchDataSources,
+  })
+
+  const { data: analysisTypes = [], isLoading: analysisTypesLoading } = useQuery({
+    queryKey: ['analysis-types'],
+    queryFn: fetchAnalysisTypes,
   })
 
   const { data: telegramSettings } = useQuery({
@@ -700,7 +739,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Tinkoff Invest API Settings */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
           <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
             Tinkoff Invest API Configuration
           </h2>
@@ -755,6 +794,63 @@ export default function SettingsPage() {
               {updateTinkoffMutation.isPending ? 'Saving...' : 'Save Tinkoff Settings'}
             </button>
           </div>
+        </div>
+
+        {/* Analysis Types Configuration Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Analysis Types Configuration
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Edit default pipeline configurations for each analysis type. Changes will be used as defaults for all future runs.
+          </p>
+
+          {analysisTypesLoading ? (
+            <p className="text-gray-600 dark:text-gray-400">Loading analysis types...</p>
+          ) : analysisTypes.length === 0 ? (
+            <p className="text-gray-600 dark:text-gray-400">No analysis types available.</p>
+          ) : (
+            <div className="space-y-3">
+              {analysisTypes.map((analysis) => (
+                <div
+                  key={analysis.id}
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {analysis.display_name}
+                        </h3>
+                        <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
+                          v{analysis.version}
+                        </span>
+                        <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-blue-600 dark:text-blue-400">
+                          {analysis.config.steps.length} steps
+                        </span>
+                      </div>
+                      {analysis.description && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                          {analysis.description}
+                        </p>
+                      )}
+                      <div className="flex gap-4 text-xs text-gray-500 dark:text-gray-400">
+                        <span>Cost: ${analysis.config.estimated_cost.toFixed(3)}</span>
+                        <span>Duration: ~{Math.round(analysis.config.estimated_duration_seconds / 60)} min</span>
+                        <span>Default: {analysis.config.default_timeframe}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => router.push(`/settings/analyses/${analysis.id}`)}
+                      className="ml-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors"
+                    >
+                      Edit Configuration
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Available Data Sources Section */}

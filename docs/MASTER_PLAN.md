@@ -85,6 +85,7 @@ Constraints and preferences:
   - `GET /instruments?analysis_type_id={id}` → list available instruments (filtered by analysis type)
   - `GET /analyses` → list all analysis types
   - `GET /analyses/{id}` → get analysis type details
+  - `PUT /analyses/{id}/config` → update analysis type default configuration (admin only)
   - `GET /health` → health probe
 
 - Frontend (Next.js)
@@ -184,6 +185,21 @@ Constraints and preferences:
     - Enable/disable toggles for each model
     - Models show: display name, provider, model ID, description, max tokens, cost per 1K tokens, failure status
     - New models from sync are disabled by default (admin can enable manually)
+  - **Analysis Types Configuration**: Edit default pipeline configurations for each analysis type
+    - Lists all analysis types with overview (name, version, step count, cost, duration, default timeframe)
+    - "Edit Configuration" button opens dedicated edit page (`/settings/analyses/{id}`)
+    - Changes affect defaults for all future runs (unless overridden with `custom_config`)
+    - Edit page features:
+      - Overview section with editable default timeframe and instrument
+      - Expandable pipeline steps (same UI as analysis detail page)
+      - Editable fields per step:
+        - Model selection (with failure indicators)
+        - Temperature and max tokens
+        - System prompt (textarea)
+        - User prompt template (textarea with variable hints)
+      - Reset button (reverts to saved config)
+      - Save button (updates database via `PUT /api/analyses/{id}/config`)
+      - Warning banner explaining changes affect defaults
   - **Data Sources**: CCXT exchanges, yfinance markets, cache settings
   - **Telegram**: Bot token, channel ID, publishing settings, active users count
   - **OpenRouter Configuration**: API key for OpenRouter (required for LLM calls and model syncing)
@@ -644,6 +660,7 @@ All analysis types use the same 6-7 step pipeline:
 - [x] Multiple Analysis Types ✅ (Completed: Created commodity_futures, crypto_analysis, equity_analysis analysis types with Russian prompts, PriceActionAnalyzer step, instrument filtering by analysis type, dashboard analysis type selector)
 - [x] Analysis Type System ✅ (Completed: Pipeline uses analysis_type configuration, supports custom_config override, all prompts in Russian, migrated to Alembic migrations)
 - [x] Model Failure Tracking ✅ (Completed: `has_failures` field added to `available_models` table, automatic marking when model errors occur, visual indicators in dropdowns and settings page, custom Select component for cross-platform support, sync logic preserves failure status, `model_failure` run status with tooltips)
+- [x] Analysis Types Configuration Editing ✅ (Completed: Settings page section listing all analysis types, edit page at `/settings/analyses/{id}` for editing default configurations, API endpoint `PUT /api/analyses/{id}/config`, editable step configurations (models, prompts, temperature, max_tokens), default timeframe and instrument editing, reset and save functionality)
 - [ ] Scheduling
 - [x] Deployment (single VM) ✅ (Scripts and documentation ready - see `docs/PRODUCTION_DEPLOYMENT.md`)
 - [ ] Backtesting (Phase 2)
